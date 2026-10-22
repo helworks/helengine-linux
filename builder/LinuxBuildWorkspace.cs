@@ -54,6 +54,7 @@ public static class LinuxBuildWorkspace {
             string nativeRoot = string.IsNullOrWhiteSpace(request.NativeObjectCacheRoot) ? "/tmp/helengine/linux" : Path.GetFullPath(request.NativeObjectCacheRoot);
             string player = await LinuxNativeBuildExecutor.BuildAsync(repository,nativeRoot,request.GeneratedCoreCppRootPath,Path.Combine(Directory.GetCurrentDirectory(),"code"),content,profile,cancellationToken);
             File.Copy(player,Path.Combine(content,"helengine_linux"),true);
+            CopyNativeRuntime(nativeRoot,content);
         }
         return new PlatformBuildReport(true,[],scenes.ToArray(),assets.ToArray());
     }
@@ -97,5 +98,23 @@ public static class LinuxBuildWorkspace {
         if (!File.Exists(source)) { throw new FileNotFoundException($"Required declared Linux cooked artifact is unavailable: '{relativePath}'.",source); }
         Directory.CreateDirectory(Path.GetDirectoryName(destination));
         if (!string.Equals(source,destination,StringComparison.Ordinal)) { File.Copy(source,destination,true); }
+    }
+    /// <summary>Packages the required UI SPIR-V and SDL3 runtime, declaring the system Vulkan loader and C++ runtime dependencies explicitly.</summary>
+    static void CopyNativeRuntime(string nativeRoot,string contentRoot) {
+        Directory.CreateDirectory(Path.Combine(contentRoot,"shaders"));
+        foreach (string shader in new[] {"quad.vert.spv","quad.frag.spv"}) {
+            string source=Path.Combine(nativeRoot,"shaders",shader);
+            if (!File.Exists(source)) { throw new FileNotFoundException("Required Linux UI shader was not produced.",source); }
+            File.Copy(source,Path.Combine(contentRoot,"shaders",shader),true);
+        }
+        string prefix=Environment.GetEnvironmentVariable("HELENGINE_LINUX_NATIVE_PREFIX");
+        if (string.IsNullOrWhiteSpace(prefix)) { throw new InvalidOperationException("HELENGINE_LINUX_NATIVE_PREFIX is required to package the locked SDL3 runtime."); }
+        string sdl=Path.Combine(prefix,"lib","x86_64-linux-gnu","libSDL3.so.0");
+        if (!File.Exists(sdl)) { throw new FileNotFoundException("The locked SDL3 runtime is missing from the native tool prefix.",sdl); }
+        Directory.CreateDirectory(Path.Combine(contentRoot,"lib")); File.Copy(sdl,Path.Combine(contentRoot,"lib","libSDL3.so.0"),true);
+        File.WriteAllText(Path.Combine(contentRoot,"linux-runtime-dependencies.json"),JsonSerializer.Serialize(new {
+            VulkanMinimumApi="1.2", Bundled=new[] {"lib/libSDL3.so.0","shaders/quad.vert.spv","shaders/quad.frag.spv"},
+            System=new[] {"libvulkan.so.1","libstdc++.so.6","libgcc_s.so.1","libc.so.6","libm.so.6"}
+        },new JsonSerializerOptions {WriteIndented=true}));
     }
 }

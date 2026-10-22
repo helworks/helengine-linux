@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 namespace helengine::linux {
-VulkanRenderer2D::VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height) : Context(context) {
+VulkanRenderer2D::VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height, std::string shaderRoot) : Context(context), ShaderRoot(std::move(shaderRoot)) {
     try { InitializePipeline(); if (!Resize(width, height)) { throw std::invalid_argument("Initial Vulkan target extent must be nonzero."); } const uint8_t white[] {255,255,255,255}; WhiteTexture = CreateTexture(1,1,white); }
     catch (...) { Release(); throw; }
 }
@@ -26,7 +26,7 @@ void VulkanRenderer2D::Release() noexcept {
 }
 
 VkShaderModule VulkanRenderer2D::LoadShader(const char* name) {
-    const std::string path = std::string(HELENGINE_LINUX_SHADER_ROOT) + "/" + name + ".spv";
+    const std::string path = ShaderRoot + "/" + name + ".spv";
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
     if (!stream) { throw std::runtime_error("Required SPIR-V artifact is unavailable: " + path); }
     const auto size = stream.tellg();

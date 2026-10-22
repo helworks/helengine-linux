@@ -17,6 +17,7 @@ LinuxRenderManager2D::~LinuxRenderManager2D() {
 }
 
 ::RuntimeTexture* LinuxRenderManager2D::BuildTextureFromRaw(::TextureAsset* data) {
+    if (Disposed) { throw std::logic_error("Cannot upload texture assets through a disposed Linux 2D bridge."); }
     if (!data || !data->Colors || !data->Colors->Data || data->Colors->Length <= 0 || !data->Width || !data->Height) { throw std::invalid_argument("Linux texture upload requires an initialized asset, nonzero dimensions and RGBA bytes."); }
     if (data->ColorFormat != TextureAssetColorFormat::Rgba32) { throw std::runtime_error("Linux texture asset requires cooked RGBA32 format: " + data->get_Id().raw()); }
     auto texture = std::make_unique<::RuntimeTexture>();
@@ -33,8 +34,10 @@ size_t LinuxRenderManager2D::ResolveTexture(::RuntimeTexture* texture) const {
 
 void LinuxRenderManager2D::ReleaseTexture(::RuntimeTexture* texture) {
     if (!texture) { throw std::invalid_argument("Linux texture release requires a runtime texture owner."); }
-    const size_t handle = ResolveTexture(texture); Renderer.ReleaseTexture(handle); TextureOwners.erase(texture); texture->set_IsDisposed(true); delete texture;
+    const size_t handle = ResolveTexture(texture); CommandBuilder->InvalidateTextCommandReuse(); Renderer.ReleaseTexture(handle); TextureOwners.erase(texture); texture->set_IsDisposed(true); delete texture;
 }
+
+void LinuxRenderManager2D::ReleaseFont(::FontAsset* font) { CommandBuilder->InvalidateTextCommandReuse(); ::RenderManager2D::ReleaseFont(font); }
 
 void LinuxRenderManager2D::UpdateTextureRegionCore(::RuntimeTexture* texture,int32_t x,int32_t y,int32_t width,int32_t height,Array<uint8_t>* rgba,int32_t rowPitch) {
     if (!rgba || !rgba->Data || rgba->Length <= 0 || x < 0 || y < 0 || width <= 0 || height <= 0 || rowPitch <= 0) { throw std::invalid_argument("Linux atlas update requires a validated positive region, row pitch and RGBA source."); }

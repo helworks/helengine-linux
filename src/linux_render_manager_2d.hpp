@@ -23,6 +23,8 @@ public:
     bool get_SupportsRgbFontCoverage() override { return false; }
     /// <summary>Releases one texture and its Vulkan descriptor after pending GPU work completes.</summary>
     void ReleaseTexture(::RuntimeTexture* texture) override;
+    /// <summary>Invalidates retained glyph references before the generated font release path retires its atlas and metrics.</summary>
+    void ReleaseFont(::FontAsset* font) override;
     /// <summary>Disposes default textures and all remaining runtime texture owners outside an active frame.</summary>
     void Dispose() override;
     /// <summary>Builds and consumes one camera's generated command list in retained order during an active native frame.</summary>

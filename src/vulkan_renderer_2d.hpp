@@ -13,7 +13,7 @@ namespace helengine::linux {
 class VulkanRenderer2D final {
 public:
     /// <summary>Creates render-pass, texture descriptors and the Vulkan 1.1 quad pipeline.</summary>
-    VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height);
+    VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height, std::string shaderRoot = HELENGINE_LINUX_SHADER_ROOT);
     /// <summary>Synchronizes and releases framebuffer, pipeline and descriptor resources in dependency order.</summary>
     ~VulkanRenderer2D();
     /// <summary>Prevents duplicating ownership of descriptors and pipeline state.</summary>
@@ -48,6 +48,8 @@ public:
     uint32_t GetWidth() const { return Width; }
     /// <summary>Returns the valid target pixel height.</summary>
     uint32_t GetHeight() const { return Height; }
+    /// <summary>Returns the actual ordered draw count recorded for the active or latest completed frame.</summary>
+    size_t GetQueuedDrawCount() const { return DrawTextures.size(); }
 private:
     /// <summary>Creates descriptor layout, sampler, render pass and shader pipeline.</summary>
     void InitializePipeline();
@@ -59,6 +61,8 @@ private:
     static void Transition(VkCommandBuffer commands, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags sourceStage, VkPipelineStageFlags destinationStage, VkAccessFlags sourceAccess, VkAccessFlags destinationAccess);
     /// <summary>Borrows the graphics context, which must outlive the renderer.</summary>
     VulkanContext& Context;
+    /// <summary>Stores the explicit diagnostic build shader root or packaged player shader directory.</summary>
+    std::string ShaderRoot;
     /// <summary>Owns the current RGBA8 output attachment.</summary>
     std::unique_ptr<GpuImage> Target;
     /// <summary>Owns sampled textures in stable handle order.</summary>
