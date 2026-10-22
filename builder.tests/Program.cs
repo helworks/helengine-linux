@@ -21,6 +21,7 @@ internal static class Program {
                 },new helengine.NumericPrecisionPolicy(16,32)));
             } catch (NotSupportedException) { unsupportedMaterialPolicyRejected = true; }
             if (!unsupportedMaterialPolicyRejected) { throw new InvalidOperationException("Public Linux material cook accepted an unadvertised numeric policy."); }
+            MaterialCookContractTests.Run();
             var command = LinuxNativeBuildExecutor.CreateConfigureCommand("/real checkout/ação", "/tmp/helengine/linux", "/generated core/á", "/script code/ü", "/content/字", "Profiler");
             if (command.UseShellExecute || !command.ArgumentList.Contains("-DHELENGINE_CORE_CPP_ROOT=/generated core/á") || !command.ArgumentList.Contains("-DHELENGINE_NATIVE_PROFILE=Profiler")) {
                 throw new InvalidOperationException("CMake paths lost exact Unicode argument boundaries.");
