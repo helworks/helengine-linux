@@ -6,7 +6,7 @@
 
 namespace helengine::linux {
 VulkanRenderer2D::VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height) : Context(context) {
-    try { InitializePipeline(); if (!Resize(width, height)) { throw std::invalid_argument("Initial Vulkan target extent must be nonzero."); } }
+    try { InitializePipeline(); if (!Resize(width, height)) { throw std::invalid_argument("Initial Vulkan target extent must be nonzero."); } const uint8_t white[] {255,255,255,255}; WhiteTexture = CreateTexture(1,1,white); }
     catch (...) { Release(); throw; }
 }
 
@@ -65,7 +65,7 @@ void VulkanRenderer2D::InitializePipeline() {
     dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT; dependencies[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     VkRenderPassCreateInfo pass {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO}; pass.attachmentCount = 1; pass.pAttachments = &color; pass.subpassCount = 1; pass.pSubpasses = &subpass; pass.dependencyCount = 2; pass.pDependencies = dependencies;
     VulkanContext::Require(vkCreateRenderPass(device, &pass, nullptr, &RenderPass), "vkCreateRenderPass");
-    VkPushConstantRange push {VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float) * 2};
+    VkPushConstantRange push {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(QuadPushConstants)};
     VkPipelineLayoutCreateInfo layout {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO}; layout.setLayoutCount = 1; layout.pSetLayouts = &DescriptorLayout; layout.pushConstantRangeCount = 1; layout.pPushConstantRanges = &push;
     VulkanContext::Require(vkCreatePipelineLayout(device, &layout, nullptr, &PipelineLayout), "vkCreatePipelineLayout");
     VkShaderModule vertex = VK_NULL_HANDLE, fragment = VK_NULL_HANDLE;
@@ -155,6 +155,7 @@ void VulkanRenderer2D::UpdateTextureRegion(size_t texture, uint32_t x, uint32_t 
 }
 
 void VulkanRenderer2D::ReleaseTexture(size_t texture) {
+    if (texture == WhiteTexture) { throw std::invalid_argument("The renderer-internal white texture is released only at renderer shutdown."); }
     if (FrameActive) { throw std::logic_error("Runtime textures must be released outside an active frame."); }
     if (texture >= Textures.size() || !Textures[texture]) { throw std::out_of_range("Cannot release a missing or already released runtime texture."); }
     VulkanContext::Require(vkDeviceWaitIdle(Context.GetDevice()),"vkDeviceWaitIdle(texture release)");
@@ -164,7 +165,7 @@ void VulkanRenderer2D::ReleaseTexture(size_t texture) {
 
 void VulkanRenderer2D::BeginFrame(std::array<float,4> clear) {
     if (FrameActive) { throw std::logic_error("Vulkan frame is already active."); }
-    std::copy(clear.begin(), clear.end(), Clear.color.float32); Vertices.clear(); DrawTextures.clear(); DrawClips.clear(); Clips.clear(); FrameActive = true;
+    std::copy(clear.begin(), clear.end(), Clear.color.float32); Vertices.clear(); DrawTextures.clear(); DrawClips.clear(); DrawConstants.clear(); Clips.clear(); FrameActive = true;
 }
 
 void VulkanRenderer2D::DrawQuad(size_t texture, const std::array<QuadVertex,6>& vertices) {
@@ -173,10 +174,20 @@ void VulkanRenderer2D::DrawQuad(size_t texture, const std::array<QuadVertex,6>& 
     const VkRect2D clip = Clips.empty() ? VkRect2D{{0,0},{Width,Height}} : Clips.back();
     if (!clip.extent.width || !clip.extent.height) { return; }
     Vertices.insert(Vertices.end(), vertices.begin(), vertices.end()); DrawTextures.push_back(texture); DrawClips.push_back(clip);
+    QuadPushConstants constants; constants.TargetSize = {static_cast<float>(Width),static_cast<float>(Height)}; DrawConstants.push_back(constants);
 }
 
 void VulkanRenderer2D::DrawRect(size_t texture, float x, float y, float width, float height, std::array<float,4> color) {
     DrawQuad(texture, {{{{x,y},{0,0},color}, {{x+width,y},{1,0},color}, {{x+width,y+height},{1,1},color}, {{x,y},{0,0},color}, {{x+width,y+height},{1,1},color}, {{x,y+height},{0,1},color}}});
+}
+
+void VulkanRenderer2D::DrawRoundedRect(float x,float y,float width,float height,float radius,float borderThickness,uint32_t corners,std::array<float,4> fill,std::array<float,4> border) {
+    if (!std::isfinite(width) || !std::isfinite(height) || !std::isfinite(radius) || !std::isfinite(borderThickness)) { throw std::invalid_argument("Rounded rectangle dimensions must be finite."); }
+    if (width <= 0 || height <= 0) { return; }
+    const size_t count = DrawTextures.size(); DrawRect(WhiteTexture,x,y,width,height,fill);
+    if (count == DrawTextures.size()) { return; }
+    auto& constants = DrawConstants.back(); constants.ShapeSize = {width,height}; constants.Radius = std::clamp(radius,0.0f,std::min(width,height)*0.5f);
+    constants.BorderThickness = std::clamp(borderThickness,0.0f,std::min(width,height)*0.5f); constants.Corners = corners; constants.Mode = 1; constants.BorderColor = border;
 }
 
 void VulkanRenderer2D::PushClip(float x, float y, float width, float height) {
@@ -207,10 +218,10 @@ std::vector<uint8_t> VulkanRenderer2D::EndFrameAndReadback() {
     vkCmdBeginRenderPass(commands, &begin, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
     VkViewport viewport {0,0,static_cast<float>(Width),static_cast<float>(Height),0,1}; vkCmdSetViewport(commands,0,1,&viewport);
-    const float targetSize[] {static_cast<float>(Width),static_cast<float>(Height)}; vkCmdPushConstants(commands,PipelineLayout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(targetSize),targetSize);
     if (vertices) {
         VkBuffer buffer = vertices->Get(); VkDeviceSize offset = 0; vkCmdBindVertexBuffers(commands,0,1,&buffer,&offset);
         for (uint32_t index = 0; index < DrawTextures.size(); ++index) {
+            vkCmdPushConstants(commands,PipelineLayout,VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(QuadPushConstants),&DrawConstants[index]);
             vkCmdSetScissor(commands,0,1,&DrawClips[index]); vkCmdBindDescriptorSets(commands,VK_PIPELINE_BIND_POINT_GRAPHICS,PipelineLayout,0,1,&TextureSets[DrawTextures[index]],0,nullptr); vkCmdDraw(commands,6,1,index*6,0);
         }
     }

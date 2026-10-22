@@ -2,6 +2,7 @@
 #include "gpu_buffer.hpp"
 #include "gpu_image.hpp"
 #include "quad_vertex.hpp"
+#include "quad_push_constants.hpp"
 #include <array>
 #include <memory>
 #include <span>
@@ -33,6 +34,8 @@ public:
     void DrawQuad(size_t texture, const std::array<QuadVertex, 6>& vertices);
     /// <summary>Appends one axis-aligned rectangle, primarily for glyph bounds, shapes and GPU contract tests.</summary>
     void DrawRect(size_t texture, float x, float y, float width, float height, std::array<float,4> color);
+    /// <summary>Appends a rounded rectangle using engine corner flags and a signed-distance fragment shader with inward border coverage.</summary>
+    void DrawRoundedRect(float x,float y,float width,float height,float radius,float borderThickness,uint32_t corners,std::array<float,4> fill,std::array<float,4> border);
     /// <summary>Intersects a new pixel-space scissor with the active stack and framebuffer bounds.</summary>
     void PushClip(float x, float y, float width, float height);
     /// <summary>Restores the previous scissor; malformed command streams fail rather than leaking clip state.</summary>
@@ -68,6 +71,8 @@ private:
     std::vector<size_t> DrawTextures;
     /// <summary>Stores the effective scissor associated with each ordered draw.</summary>
     std::vector<VkRect2D> DrawClips;
+    /// <summary>Stores immutable shader constants associated with each ordered draw.</summary>
+    std::vector<QuadPushConstants> DrawConstants;
     /// <summary>Stores nested clip state without changing engine command ordering.</summary>
     std::vector<VkRect2D> Clips;
     /// <summary>Stores the explicit frame clear value.</summary>
@@ -90,5 +95,7 @@ private:
     uint32_t Width = 0, Height = 0;
     /// <summary>Rejects invalid Begin/Draw/End lifecycle transitions.</summary>
     bool FrameActive = false;
+    /// <summary>Owns a renderer-internal white texture so solid SDF shapes retain a valid sampler binding.</summary>
+    size_t WhiteTexture = SIZE_MAX;
 };
 }
