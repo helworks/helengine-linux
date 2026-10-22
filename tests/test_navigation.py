@@ -2,6 +2,7 @@
 import argparse
 import os
 import pathlib
+import re
 import subprocess
 
 
@@ -23,9 +24,12 @@ def main():
     result = subprocess.run(command,capture_output=True,text=True,env=environment,timeout=120)
     output = result.stdout + result.stderr
     required = ["core=generated scene=DemoDiscMainMenu catalog_count=15", "selected=scene-colored-cube-grid menu_items=44", "panel=ray-tracing-select selected=scene-software-path-tracer menu_items=44", "scene=software_path_tracer", "core_frames=100", "nonuniform=1"]
-    if result.returncode or any(marker not in output for marker in required) or "Vulkan validation:" in output:
+    transitions = re.findall(r"loaded_scene_frame=\d+ scene=(\S+)",output)
+    tracer_index = transitions.index("software_path_tracer") if "software_path_tracer" in transitions else len(transitions)
+    returned = transitions and transitions[0]=="DemoDiscMainMenu" and "DemoDiscMainMenu" in transitions[tracer_index+1:]
+    if result.returncode or any(marker not in output for marker in required) or not returned or "Vulkan validation:" in output:
         raise RuntimeError("Real SDL/Core menu navigation failed:\n"+output)
-    print("PASS generated Core menu44 SDL-virtual-gamepad selection panel scene-transition GPU-readback validation mode="+("isolated-Xvfb" if options.xvfb else "offscreen"))
+    print("PASS generated Core menu44 SDL-virtual-gamepad selection panel scene-entry-and-return GPU-readback validation mode="+("isolated-Xvfb" if options.xvfb else "offscreen"))
 
 
 if __name__ == "__main__":
