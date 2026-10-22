@@ -53,9 +53,9 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
     std::unique_ptr<SdlHost> window;
     std::unique_ptr<VulkanContext> offscreen;
     if (options.Offscreen) { offscreen=std::make_unique<VulkanContext>(std::span<const char* const>{},options.Validation,VK_API_VERSION_1_2); }
-    else { window=std::make_unique<SdlHost>("HelEngine Linux",1280,720,options.Validation); }
+    else { window=std::make_unique<SdlHost>("HelEngine Linux",HELENGINE_LINUX_INITIAL_WIDTH,HELENGINE_LINUX_INITIAL_HEIGHT,options.Validation); }
     VulkanContext& graphics=window ? window->GetContext() : *offscreen;
-    VulkanRenderer2D renderer(graphics,1280,720,(std::filesystem::path(options.ContentRoot)/"shaders").string());
+    VulkanRenderer2D renderer(graphics,HELENGINE_LINUX_INITIAL_WIDTH,HELENGINE_LINUX_INITIAL_HEIGHT,(std::filesystem::path(options.ContentRoot)/"shaders").string());
     LinuxRenderManager2D render2d(renderer); LinuxRenderManager3D render3d(renderer,render2d); SdlInputBackend input(options.Offscreen);
     auto content=std::make_unique<::HostFileSystemContentStreamSource>(options.ContentRoot);
     std::unique_ptr<::RuntimeSceneCatalog> catalog(CreateSceneCatalog());
@@ -65,7 +65,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
     initialization.ContentStreamSource=content.get(); initialization.SceneCatalog=catalog.get(); initialization.StandardPlatformInputConfiguration=standardInput.get();
     initialization.SceneLoadingBudgetMilliseconds=he_get_runtime_scene_loading_budget_milliseconds(); initialization.PlatformSettingsConfiguration=settings.get();
     ::Core core(&initialization); ::PlatformInfo platform(he_get_runtime_platform_name(),he_get_runtime_platform_version());
-    render3d.AddWindow(1,1280,720); render3d.set_ShadowsEnabled(he_get_runtime_shadows_enabled());
+    render3d.AddWindow(1,HELENGINE_LINUX_INITIAL_WIDTH,HELENGINE_LINUX_INITIAL_HEIGHT); render3d.set_ShadowsEnabled(he_get_runtime_shadows_enabled());
     core.Initialize(&render3d,&render2d,&input,&platform,&initialization); RegisterGeneratedRuntimeModules(&core);
     try {
         auto* entries=catalog->get_Entries();
@@ -80,7 +80,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
                 SDL_Event event {}; while (window->PollEvent(event)) { input.HandleEvent(event); if (event.type==SDL_EVENT_QUIT) { running=false; } }
                 const auto size=window->GetDrawableSize();
                 if (!size.width || !size.height) { SDL_Delay(16); continue; }
-                renderer.Resize(size.width,size.height); render3d.OnWindowResize(1,size.width,size.height);
+                if (size.width!=renderer.GetWidth() || size.height!=renderer.GetHeight()) { renderer.Resize(size.width,size.height); render3d.OnWindowResize(1,size.width,size.height); }
             }
             const auto now=std::chrono::steady_clock::now();
             const double elapsed=options.Offscreen ? 1.0/60.0 : std::chrono::duration<double>(now-previous).count(); previous=now;

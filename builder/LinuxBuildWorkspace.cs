@@ -52,7 +52,8 @@ public static class LinuxBuildWorkspace {
         if (!assetsOnly) {
             string repository = ResolveRepositoryRoot();
             string nativeRoot = string.IsNullOrWhiteSpace(request.NativeObjectCacheRoot) ? "/tmp/helengine/linux" : Path.GetFullPath(request.NativeObjectCacheRoot);
-            string player = await LinuxNativeBuildExecutor.BuildAsync(repository,nativeRoot,request.GeneratedCoreCppRootPath,Path.Combine(Directory.GetCurrentDirectory(),"code"),content,profile,cancellationToken);
+            string player = await LinuxNativeBuildExecutor.BuildAsync(repository,nativeRoot,request.GeneratedCoreCppRootPath,Path.Combine(Directory.GetCurrentDirectory(),"code"),content,profile,
+                ReadGraphicsDimension(request.SelectedGraphicsOptionValues,"default-width"),ReadGraphicsDimension(request.SelectedGraphicsOptionValues,"default-height"),cancellationToken);
             File.Copy(player,Path.Combine(content,"helengine_linux"),true);
             CopyNativeRuntime(nativeRoot,content);
         }
@@ -119,5 +120,10 @@ public static class LinuxBuildWorkspace {
             VulkanMinimumApi="1.2", Bundled=new[] {"lib/libSDL3.so.0","licenses/SDL3.txt","shaders/quad.vert.spv","shaders/quad.frag.spv"},
             System=new[] {"libvulkan.so.1","libstdc++.so.6","libgcc_s.so.1","libc.so.6","libm.so.6"}
         },new JsonSerializerOptions {WriteIndented=true}));
+    }
+    /// <summary>Requires the resolved graphics profile dimension so the native host cannot silently ignore selected framebuffer settings.</summary>
+    static int ReadGraphicsDimension(IReadOnlyDictionary<string,string> values,string name) {
+        if (!values.TryGetValue(name,out string value) || !int.TryParse(value,out int dimension) || dimension<=0) { throw new ArgumentException($"Linux graphics option '{name}' must be a positive integer."); }
+        return dimension;
     }
 }

@@ -34,7 +34,7 @@ size_t LinuxRenderManager2D::ResolveTexture(::RuntimeTexture* texture) const {
 
 void LinuxRenderManager2D::ReleaseTexture(::RuntimeTexture* texture) {
     if (!texture) { throw std::invalid_argument("Linux texture release requires a runtime texture owner."); }
-    const size_t handle = ResolveTexture(texture); CommandBuilder->InvalidateTextCommandReuse(); Renderer.ReleaseTexture(handle); TextureOwners.erase(texture); texture->set_IsDisposed(true); delete texture;
+    const size_t handle = ResolveTexture(texture); CommandBuilder->InvalidateTextCommandReuse(); Renderer.ReleaseTexture(handle); TextureOwners.erase(texture); ::RenderManager2D::ReleaseTexture(texture);
 }
 
 void LinuxRenderManager2D::ReleaseFont(::FontAsset* font) { CommandBuilder->InvalidateTextCommandReuse(); ::RenderManager2D::ReleaseFont(font); }
