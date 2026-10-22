@@ -55,6 +55,15 @@ int main(int argc, char** argv) {
         if (pixels[shapeCorner] != 0 || pixels[shapeCorner+1] != 0 || pixels[shapeCenter] != 255 || pixels[shapeCenter+1] != 0 || pixels[shapeBorder] != 0 || pixels[shapeBorder+1] != 255) {
             throw std::runtime_error("GPU rounded rectangle fill, border or corner coverage failed.");
         }
+        if (!renderer.GetOutputImageView() || !renderer.GetTextureDescriptor(texture).imageView) { throw std::runtime_error("Shared native target/texture borrowing did not expose live GPU views."); }
+        VkCommandBuffer loadCommands=context.BeginCommands();
+        VkImageMemoryBarrier loadBarrier {}; loadBarrier.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        loadBarrier.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT; loadBarrier.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        loadBarrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; loadBarrier.newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        loadBarrier.srcQueueFamilyIndex=loadBarrier.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED; loadBarrier.image=renderer.GetOutputImage(); loadBarrier.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+        vkCmdPipelineBarrier(loadCommands,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,0,0,nullptr,0,nullptr,1,&loadBarrier); context.SubmitAndWait(loadCommands);
+        renderer.BeginFrame({0,1,0,1},true); pixels=renderer.EndFrameAndReadback();
+        if (pixels[shapeCenter]!=255 || pixels[shapeCenter+1]!=0) { throw std::runtime_error("UI load pass discarded color content produced by a preceding native pass."); }
         if (context.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation reported errors during GPU contracts."); }
         std::cout << "PASS textured-quads alpha draw-order clipping resize zero-drawable texture-region row-pitch UV resource-release rounded-fill-border-corners readback\n";
         return 0;
