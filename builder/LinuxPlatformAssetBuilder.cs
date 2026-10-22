@@ -11,7 +11,7 @@ namespace helengine.linux.builder;
 /// <summary>Publishes Linux Vulkan build metadata and routes resolved cook/build requests to the Linux-owned native pipeline.</summary>
 public sealed class LinuxPlatformAssetBuilder : IPlatformAssetBuilder, IPlatformLayoutTargetProvider, IShaderBackendRegistryContributor {
     /// <summary>Identifies the native Linux builder without claiming editor Play integration.</summary>
-    public PlatformBuilderDescriptor Descriptor { get; } = new("helengine.linux.builder", "1.0.0", "Linux Vulkan",
+    public PlatformBuilderDescriptor Descriptor { get; } = new("helengine.linux.builder", "1.0.0", "linux",
         new EngineCompatibilityRange("1.0.0","999.0.0"),new ManifestCompatibilityRange(1,1),["linux"],["debug","release","profiler"]);
     /// <summary>Exposes immutable profile/schema metadata consumed by the editor and portable CLI.</summary>
     public PlatformDefinition Definition { get; } = LinuxPlatformDefinitionFactory.Create();
