@@ -38,6 +38,9 @@ def main():
             field = "tracer_spp" if tracing else "mesh_visible_samples"
             measured = re.search(r"\b"+field+r"=(\d+)",output)
             passed = result.returncode==0 and measured is not None and int(measured.group(1))>0 and "nonuniform=1" in output and "Vulkan validation:" not in output
+            if scene in ["directional_shadow_plaza","pbr_shadow_theater"]:
+                shadow_samples = re.search(r"\bshadow_visible_samples=(\d+)",output)
+                passed = passed and shadow_samples is not None and int(shadow_samples.group(1))>0
             record = {"scene":scene,"passed":passed,"seconds":round(time.monotonic()-started,3),"exitCode":result.returncode,"evidence":output}
         except subprocess.TimeoutExpired as error:
             record = {"scene":scene,"passed":False,"seconds":round(time.monotonic()-started,3),"error":"Player exceeded the explicit 240-second validation limit.","evidence":str(error.stdout or "")+str(error.stderr or "")}
