@@ -6,6 +6,7 @@
 class RuntimeSceneCatalog;
 class StandardPlatformInputConfiguration;
 class StandardPlatformActionBinding;
+class Core;
 namespace helengine::linux {
 /// <summary>Runs the real generated Core, packaged scene catalog and native renderer in a normal SDL host or explicit offscreen validation mode.</summary>
 class LinuxPlayer final {
@@ -19,5 +20,7 @@ private:
     static ::RuntimeSceneCatalog* CreateSceneCatalog();
     /// <summary>Translates the generated standard action manifest into the existing portable input configuration.</summary>
     static ::StandardPlatformInputConfiguration* CreateStandardInput(std::vector<std::unique_ptr<::StandardPlatformActionBinding>>& bindingOwners);
+    /// <summary>Reads optional generated menu diagnostics during explicit input replay, without invoking menu actions or modifying generated state.</summary>
+    static std::string SnapshotMenuState(::Core* core);
 };
 }

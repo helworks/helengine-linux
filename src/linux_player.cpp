@@ -15,6 +15,13 @@
 #include "RuntimeSceneCatalogEntry.hpp"
 #include "SceneManager.hpp"
 #include "SceneLoadMode.hpp"
+#include "ObjectManager.hpp"
+#include "Entity.hpp"
+#include "Component.hpp"
+#if __has_include("MenuComponent.hpp")
+#include "MenuComponent.hpp"
+#include "MenuItemComponent.hpp"
+#endif
 #include "LoadedSceneRecord.hpp"
 #include "GeneratedRuntimeModuleRegistration.hpp"
 #include "StandardPlatformInputConfiguration.hpp"
@@ -68,6 +75,23 @@ std::string LinuxPlayer::ResolveSceneId(::RuntimeSceneCatalog* catalog,const std
     return selected;
 }
 
+std::string LinuxPlayer::SnapshotMenuState(::Core* core) {
+#if __has_include("MenuComponent.hpp")
+    std::string state; int32_t items=0; auto* entities=core->get_ObjectManager()->get_Entities();
+    for (int32_t index=0;entities && index<entities->get_Count();++index) {
+        auto* entity=(*entities)[index]; if (!entity) { continue; } auto* components=entity->get_Components();
+        for (int32_t componentIndex=0;components && componentIndex<components->get_Count();++componentIndex) {
+            auto* component=(*components)[componentIndex];
+            if (auto* menu=dynamic_cast<::MenuComponent*>(component)) { state+="panel="+menu->get_ActivePanelId().raw()+" selected="+menu->get_SelectedItemId().raw(); }
+            else if (dynamic_cast<::MenuItemComponent*>(component)) { ++items; }
+        }
+    }
+    return state.empty()?state:state+" menu_items="+std::to_string(items);
+#else
+    (void)core; return {};
+#endif
+}
+
 int LinuxPlayer::Run(const LinuxRunOptions& options) {
     std::unique_ptr<LinuxInputReplay> replay;
     if (!options.InputScript.empty()) { std::ifstream script(options.InputScript); replay=std::make_unique<LinuxInputReplay>(script); }
@@ -99,7 +123,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
         std::cout << "core=generated scene=" << scene << " catalog_count=" << entries->get_Length() << " device=" << graphics.GetProperties().deviceName << '\n';
         core.get_SceneManager()->LoadScene(scene,::SceneLoadMode::Single); core.get_SceneManager()->CommitPendingOperationsAtFrameBoundary();
         bool running=true; uint32_t frames=0; auto previous=std::chrono::steady_clock::now();
-        std::string lastScene;
+        std::string lastScene,lastMenu;
         while (running && (!options.Frames || frames<options.Frames)) {
             if (window) {
                 SDL_Event event {}; while (window->PollEvent(event)) { input.HandleEvent(event); if (event.type==SDL_EVENT_QUIT) { running=false; } }
@@ -114,6 +138,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
             const auto drawEnd=std::chrono::steady_clock::now(); core.SetHostFrameTimings(std::chrono::duration<double,std::milli>(drawStart-updateStart).count(),std::chrono::duration<double,std::milli>(drawEnd-drawStart).count());
             auto* loaded=core.get_SceneManager()->get_LoadedScenes();
             if (loaded && loaded->get_Count()>0) { const auto current=loaded->get_Item(loaded->get_Count()-1)->get_SceneId().raw(); if (current!=lastScene) { std::cout << "loaded_scene_frame=" << frames << " scene=" << current << '\n'; lastScene=current; } }
+            if (replay) { const auto state=SnapshotMenuState(&core); if (state!=lastMenu) { std::cout << "menu_state_frame=" << frames << ' ' << state << '\n'; lastMenu=state; } }
             if (window) { window->Present(renderer); } ++frames;
         }
         if (replay && !replay->IsComplete()) { throw std::runtime_error("Linux player stopped before all explicit input replay events were captured."); }
