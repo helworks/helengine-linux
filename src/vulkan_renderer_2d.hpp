@@ -13,7 +13,7 @@ namespace helengine::linux {
 class VulkanRenderer2D final {
 public:
     /// <summary>Creates render-pass, texture descriptors and the Vulkan 1.1 quad pipeline.</summary>
-    VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height, std::string shaderRoot = HELENGINE_LINUX_SHADER_ROOT);
+    VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height, std::string shaderRoot = {});
     /// <summary>Synchronizes and releases framebuffer, pipeline and descriptor resources in dependency order.</summary>
     ~VulkanRenderer2D();
     /// <summary>Prevents duplicating ownership of descriptors and pipeline state.</summary>
@@ -29,7 +29,7 @@ public:
     /// <summary>Recreates a target only for a nonzero drawable size; minimized windows retain their last valid target.</summary>
     bool Resize(uint32_t width, uint32_t height);
     /// <summary>Begins a frame with an explicit clear color and an empty clipping stack.</summary>
-    void BeginFrame(std::array<float, 4> clear);
+    void BeginFrame(std::array<float, 4> clear, bool loadExistingColor = false);
     /// <summary>Appends six ordered vertices with normalized UVs and the currently active clip rectangle.</summary>
     void DrawQuad(size_t texture, const std::array<QuadVertex, 6>& vertices);
     /// <summary>Appends one axis-aligned rectangle, primarily for glyph bounds, shapes and GPU contract tests.</summary>
@@ -44,6 +44,10 @@ public:
     std::vector<uint8_t> EndFrameAndReadback();
     /// <summary>Returns the final transfer-source image for presentation on the same device.</summary>
     VkImage GetOutputImage() const { return Target->Get(); }
+    /// <summary>Borrows the RGBA8 target view for a same-device native pass; the renderer retains image ownership.</summary>
+    VkImageView GetOutputImageView() const { return Target->GetView(); }
+    /// <summary>Borrows a live texture's sampled image/sampler binding while this renderer retains ownership and synchronization.</summary>
+    VkDescriptorImageInfo GetTextureDescriptor(size_t texture) const;
     /// <summary>Returns the valid target pixel width.</summary>
     uint32_t GetWidth() const { return Width; }
     /// <summary>Returns the valid target pixel height.</summary>
@@ -83,6 +87,8 @@ private:
     VkClearValue Clear {};
     /// <summary>Owns the target's compatible render pass.</summary>
     VkRenderPass RenderPass = VK_NULL_HANDLE;
+    /// <summary>Owns the compatible UI pass that preserves preceding 3D color in COLOR_ATTACHMENT_OPTIMAL layout.</summary>
+    VkRenderPass LoadRenderPass = VK_NULL_HANDLE;
     /// <summary>Owns the framebuffer bound to Target.</summary>
     VkFramebuffer Framebuffer = VK_NULL_HANDLE;
     /// <summary>Owns the sampled-image binding layout.</summary>
@@ -99,6 +105,8 @@ private:
     uint32_t Width = 0, Height = 0;
     /// <summary>Rejects invalid Begin/Draw/End lifecycle transitions.</summary>
     bool FrameActive = false;
+    /// <summary>Selects the preserving render pass when a preceding same-device pass supplied color content.</summary>
+    bool LoadExistingColor = false;
     /// <summary>Owns a renderer-internal white texture so solid SDF shapes retain a valid sampler binding.</summary>
     size_t WhiteTexture = SIZE_MAX;
 };

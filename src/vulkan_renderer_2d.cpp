@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 namespace helengine::linux {
-VulkanRenderer2D::VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height, std::string shaderRoot) : Context(context), ShaderRoot(std::move(shaderRoot)) {
+VulkanRenderer2D::VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height, std::string shaderRoot) : Context(context), ShaderRoot(shaderRoot.empty() ? HELENGINE_LINUX_SHADER_ROOT : std::move(shaderRoot)) {
     try { InitializePipeline(); if (!Resize(width, height)) { throw std::invalid_argument("Initial Vulkan target extent must be nonzero."); } const uint8_t white[] {255,255,255,255}; WhiteTexture = CreateTexture(1,1,white); }
     catch (...) { Release(); throw; }
 }
@@ -18,6 +18,7 @@ void VulkanRenderer2D::Release() noexcept {
     Target.reset();
     if (Pipeline) { vkDestroyPipeline(device, Pipeline, nullptr); Pipeline = VK_NULL_HANDLE; }
     if (PipelineLayout) { vkDestroyPipelineLayout(device, PipelineLayout, nullptr); PipelineLayout = VK_NULL_HANDLE; }
+    if (LoadRenderPass) { vkDestroyRenderPass(device, LoadRenderPass, nullptr); LoadRenderPass = VK_NULL_HANDLE; }
     if (RenderPass) { vkDestroyRenderPass(device, RenderPass, nullptr); RenderPass = VK_NULL_HANDLE; }
     if (DescriptorPool) { vkDestroyDescriptorPool(device, DescriptorPool, nullptr); DescriptorPool = VK_NULL_HANDLE; }
     Textures.clear(); TextureSets.clear();
@@ -65,6 +66,10 @@ void VulkanRenderer2D::InitializePipeline() {
     dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT; dependencies[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     VkRenderPassCreateInfo pass {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO}; pass.attachmentCount = 1; pass.pAttachments = &color; pass.subpassCount = 1; pass.pSubpasses = &subpass; pass.dependencyCount = 2; pass.pDependencies = dependencies;
     VulkanContext::Require(vkCreateRenderPass(device, &pass, nullptr, &RenderPass), "vkCreateRenderPass");
+    color.loadOp=VK_ATTACHMENT_LOAD_OP_LOAD; color.initialLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    dependencies[0].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; dependencies[0].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    VulkanContext::Require(vkCreateRenderPass(device,&pass,nullptr,&LoadRenderPass),"vkCreateRenderPass(UI load)");
     VkPushConstantRange push {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(QuadPushConstants)};
     VkPipelineLayoutCreateInfo layout {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO}; layout.setLayoutCount = 1; layout.pSetLayouts = &DescriptorLayout; layout.pushConstantRangeCount = 1; layout.pPushConstantRanges = &push;
     VulkanContext::Require(vkCreatePipelineLayout(device, &layout, nullptr, &PipelineLayout), "vkCreatePipelineLayout");
@@ -163,9 +168,14 @@ void VulkanRenderer2D::ReleaseTexture(size_t texture) {
     TextureSets[texture] = VK_NULL_HANDLE; Textures[texture].reset();
 }
 
-void VulkanRenderer2D::BeginFrame(std::array<float,4> clear) {
+VkDescriptorImageInfo VulkanRenderer2D::GetTextureDescriptor(size_t texture) const {
+    if (texture>=Textures.size() || !Textures[texture]) { throw std::out_of_range("Cannot borrow a missing or released Vulkan runtime texture."); }
+    return {Sampler,Textures[texture]->GetView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+}
+
+void VulkanRenderer2D::BeginFrame(std::array<float,4> clear,bool loadExistingColor) {
     if (FrameActive) { throw std::logic_error("Vulkan frame is already active."); }
-    std::copy(clear.begin(), clear.end(), Clear.color.float32); Vertices.clear(); DrawTextures.clear(); DrawClips.clear(); DrawConstants.clear(); Clips.clear(); FrameActive = true;
+    std::copy(clear.begin(), clear.end(), Clear.color.float32); Vertices.clear(); DrawTextures.clear(); DrawClips.clear(); DrawConstants.clear(); Clips.clear(); FrameActive = true; LoadExistingColor=loadExistingColor;
 }
 
 void VulkanRenderer2D::DrawQuad(size_t texture, const std::array<QuadVertex,6>& vertices) {
@@ -214,7 +224,7 @@ std::vector<uint8_t> VulkanRenderer2D::EndFrameAndReadback() {
         std::memcpy(vertices->Map(), Vertices.data(), Vertices.size() * sizeof(QuadVertex)); vertices->Unmap();
     }
     VkCommandBuffer commands = Context.BeginCommands();
-    VkRenderPassBeginInfo begin {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO}; begin.renderPass = RenderPass; begin.framebuffer = Framebuffer; begin.renderArea.extent = {Width,Height}; begin.clearValueCount = 1; begin.pClearValues = &Clear;
+    VkRenderPassBeginInfo begin {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO}; begin.renderPass = LoadExistingColor ? LoadRenderPass : RenderPass; begin.framebuffer = Framebuffer; begin.renderArea.extent = {Width,Height}; begin.clearValueCount = 1; begin.pClearValues = &Clear;
     vkCmdBeginRenderPass(commands, &begin, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
     VkViewport viewport {0,0,static_cast<float>(Width),static_cast<float>(Height),0,1}; vkCmdSetViewport(commands,0,1,&viewport);
