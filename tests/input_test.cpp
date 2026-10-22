@@ -25,6 +25,9 @@ int main() {
         if (!(*frame.Gamepads)[0].Connected || !(*frame.Gamepads)[0].IsButtonDown(::InputGamepadButton::South)) { throw std::runtime_error("Explicit SDL virtual button did not enter the real generated CaptureFrame gamepad snapshot."); }
         event.type=SDL_EVENT_GAMEPAD_BUTTON_UP; virtualPad.Apply(event); frame=input.CaptureFrame();
         if ((*frame.Gamepads)[0].IsButtonDown(::InputGamepadButton::South)) { throw std::runtime_error("Released SDL virtual gamepad button remained pressed."); }
+        const auto previousFrame=frame;
+        event.type=SDL_EVENT_GAMEPAD_BUTTON_DOWN; event.gbutton.button=SDL_GAMEPAD_BUTTON_DPAD_DOWN; virtualPad.Apply(event); frame=input.CaptureFrame();
+        if (!(*frame.Gamepads)[0].IsButtonDown(::InputGamepadButton::DPadDown) || (*previousFrame.Gamepads)[0].IsButtonDown(::InputGamepadButton::DPadDown)) { throw std::runtime_error("Current SDL capture mutated the previous gamepad snapshot, destroying generated menu navigation edges."); }
         std::cout << "PASS generated desktop input SDL mapping press release focus scroll policy virtual-gamepad no-desktop-poll\n"; return 0;
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
 }
