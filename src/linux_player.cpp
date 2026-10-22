@@ -110,7 +110,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
             const auto updateStart=std::chrono::steady_clock::now(); core.Update(elapsed); const auto drawStart=std::chrono::steady_clock::now(); core.Draw();
             const auto drawEnd=std::chrono::steady_clock::now(); core.SetHostFrameTimings(std::chrono::duration<double,std::milli>(drawStart-updateStart).count(),std::chrono::duration<double,std::milli>(drawEnd-drawStart).count());
             auto* loaded=core.get_SceneManager()->get_LoadedScenes();
-            if (loaded && loaded->get_Count()>0) { const auto current=(*loaded)[loaded->get_Count()-1]->get_SceneId().raw(); if (current!=lastScene) { std::cout << "loaded_scene_frame=" << frames << " scene=" << current << '\n'; lastScene=current; } }
+            if (loaded && loaded->get_Count()>0) { const auto current=loaded->get_Item(loaded->get_Count()-1)->get_SceneId().raw(); if (current!=lastScene) { std::cout << "loaded_scene_frame=" << frames << " scene=" << current << '\n'; lastScene=current; } }
             if (window) { window->Present(renderer); } ++frames;
         }
         if (replay && !replay->IsComplete()) { throw std::runtime_error("Linux player stopped before all explicit input replay events were captured."); }
