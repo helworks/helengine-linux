@@ -55,6 +55,7 @@ public static class LinuxMaterialCooker {
         float roughness = ReadOptionalFloatField(request.FieldValues, RoughnessFieldId, StandardMaterialRoughnessDefaults.DefaultRoughness);
         float metallic = ReadOptionalFloatField(request.FieldValues, MetallicFieldId, StandardMaterialMetallicDefaults.DefaultMetallic);
         float specular = ReadOptionalFloatField(request.FieldValues, SpecularFieldId, StandardMaterialSpecularDefaults.DefaultSpecular);
+        string emissiveColor = ReadOptionalField(request.FieldValues, "emissive-color", "#ffffff00");
         bool castsShadows = ReadOptionalBooleanField(request.FieldValues, "casts-shadow", true);
         bool receivesShadows = ReadOptionalBooleanField(request.FieldValues, "receives-shadow", true);
 
@@ -66,13 +67,15 @@ public static class LinuxMaterialCooker {
             Variant = variant,
             DiffuseTextureAssetId = diffuseTextureAssetId,
             RoughnessTextureAssetId = roughnessTextureAssetId,
+            NormalTextureAssetId = ReadOptionalField(request.FieldValues, "normal-texture-id", string.Empty),
+            EmissiveTextureAssetId = ReadOptionalField(request.FieldValues, "emissive-texture-id", string.Empty),
             CastsShadows = castsShadows,
             ReceivesShadows = receivesShadows,
             RenderState = new MaterialRenderState(),
             ConstantBuffers = [
                 new MaterialConstantBufferAsset {
                     Name = BaseColorBufferName,
-                    Data = CreateFloat4ConstantBufferData(ParseBaseColor(baseColor))
+                    Data = CreateFloat4ConstantBufferData(ParseColor(baseColor, "Base color"))
                 },
                 new MaterialConstantBufferAsset {
                     Name = StandardMaterialRoughnessDefaults.RoughnessBufferName,
@@ -85,6 +88,10 @@ public static class LinuxMaterialCooker {
                 new MaterialConstantBufferAsset {
                     Name = StandardMaterialSpecularDefaults.SpecularBufferName,
                     Data = StandardMaterialSpecularDefaults.CreateConstantBufferData(specular)
+                },
+                new MaterialConstantBufferAsset {
+                    Name = "EmissiveColorBuffer",
+                    Data = CreateFloat4ConstantBufferData(ParseColor(emissiveColor, "Emissive color"))
                 }
             ]
         };
@@ -92,6 +99,11 @@ public static class LinuxMaterialCooker {
         return new PlatformMaterialCookResult(
             global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset, request.NumericPolicy),
             [new PlatformShaderDependency(shaderAssetId, vertexProgram, pixelProgram, variant)]);
+    }
+
+    /// <summary>Preserves an optional authored field exactly while applying its documented schema default only when omitted or blank.</summary>
+    static string ReadOptionalField(IReadOnlyDictionary<string,string> fields, string fieldId, string defaultValue) {
+        return fields.TryGetValue(fieldId, out string value) && !string.IsNullOrWhiteSpace(value) ? value : defaultValue;
     }
 
     static string ReadRequiredField(IReadOnlyDictionary<string, string> fieldValues, string fieldId) {
@@ -162,11 +174,12 @@ public static class LinuxMaterialCooker {
     }
 
     /// <summary>
-    /// Parses one serialized base-color string into a normalized floating-point color.
+    /// Parses one serialized material color into a normalized tint and alpha/strength value.
     /// </summary>
     /// <param name="serializedColor">Serialized color string in <c>#RRGGBB</c> or <c>#RRGGBBAA</c> form.</param>
+    /// <param name="fieldName">Authored field label retained in validation errors.</param>
     /// <returns>Normalized color value.</returns>
-    static float4 ParseBaseColor(string serializedColor) {
+    static float4 ParseColor(string serializedColor, string fieldName) {
         if (string.IsNullOrWhiteSpace(serializedColor)) {
             return new float4(1f, 1f, 1f, 1f);
         }
@@ -177,7 +190,7 @@ public static class LinuxMaterialCooker {
         }
 
         if (normalized.Length != 6 && normalized.Length != 8) {
-            throw new InvalidOperationException("Base color must use #RRGGBB or #RRGGBBAA.");
+            throw new InvalidOperationException($"{fieldName} must use #RRGGBB or #RRGGBBAA.");
         }
 
         try {
@@ -194,7 +207,7 @@ public static class LinuxMaterialCooker {
                 blue / 255f,
                 alpha / 255f);
         } catch (FormatException ex) {
-            throw new InvalidOperationException("Base color must use #RRGGBB or #RRGGBBAA.", ex);
+            throw new InvalidOperationException($"{fieldName} must use #RRGGBB or #RRGGBBAA.", ex);
         }
     }
 

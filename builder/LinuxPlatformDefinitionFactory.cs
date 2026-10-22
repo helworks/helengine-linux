@@ -190,6 +190,27 @@ public static class LinuxPlatformDefinitionFactory {
                             false,
                             []),
                         new PlatformMaterialFieldDefinition(
+                            "normal-texture-id",
+                            "Normal Texture",
+                            PlatformMaterialFieldKind.AssetReference,
+                            string.Empty,
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "emissive-texture-id",
+                            "Emissive Texture",
+                            PlatformMaterialFieldKind.AssetReference,
+                            string.Empty,
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "emissive-color",
+                            "Emissive Tint and Strength",
+                            PlatformMaterialFieldKind.Color,
+                            "#ffffff00",
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
                             "roughness",
                             "Roughness",
                             PlatformMaterialFieldKind.Text,
