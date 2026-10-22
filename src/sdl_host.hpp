@@ -20,6 +20,8 @@ public:
     bool PollEvent(SDL_Event& event);
     /// <summary>Returns current drawable pixel size, preserving zero size while minimized.</summary>
     VkExtent2D GetDrawableSize() const;
+    /// <summary>Requests a logical SDL window size; the drawable extent is queried separately to respect DPI.</summary>
+    void SetWindowSize(int width, int height);
     /// <summary>Blits a completed same-device RGBA target to the swapchain, recovering out-of-date/suboptimal surfaces explicitly.</summary>
     bool Present(VulkanRenderer2D& renderer);
 private:

@@ -3,6 +3,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <vector>
+#include <iostream>
 
 namespace helengine::linux {
 void VulkanContext::Require(VkResult result, const char* operation) {
@@ -25,16 +26,28 @@ VulkanContext::VulkanContext(std::span<const char* const> extensions, bool valid
                 throw std::runtime_error("Explicit Vulkan validation requested but VK_LAYER_KHRONOS_validation is unavailable.");
             }
         }
+        std::vector<const char*> enabledExtensions(extensions.begin(),extensions.end());
+        if (validation) { enabledExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME); }
+        VkDebugUtilsMessengerCreateInfoEXT debug {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+        debug.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        debug.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        debug.pfnUserCallback = ReportValidation; debug.pUserData = this;
         VkApplicationInfo application {VK_STRUCTURE_TYPE_APPLICATION_INFO};
         application.pApplicationName = "HelEngine Linux";
         application.apiVersion = VK_API_VERSION_1_1;
         VkInstanceCreateInfo create {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
         create.pApplicationInfo = &application;
-        create.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-        create.ppEnabledExtensionNames = extensions.data();
+        create.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
+        create.ppEnabledExtensionNames = enabledExtensions.data();
+        create.pNext = validation ? &debug : nullptr;
         create.enabledLayerCount = validation ? 1 : 0;
         create.ppEnabledLayerNames = validation ? &validationLayer : nullptr;
         Require(vkCreateInstance(&create, nullptr, &Instance), "vkCreateInstance(Vulkan1.1)");
+        if (validation) {
+            const auto createMessenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(Instance,"vkCreateDebugUtilsMessengerEXT"));
+            if (!createMessenger) { throw std::runtime_error("Vulkan loader did not expose requested VK_EXT_debug_utils messenger entry point."); }
+            Require(createMessenger(Instance,&debug,nullptr,&DebugMessenger),"vkCreateDebugUtilsMessengerEXT");
+        }
         uint32_t count = 0;
         Require(vkEnumeratePhysicalDevices(Instance, &count, nullptr), "vkEnumeratePhysicalDevices(count)");
         if (count == 0) { throw std::runtime_error("No Vulkan physical device is available."); }
@@ -86,7 +99,18 @@ void VulkanContext::Release() noexcept {
         vkDestroyDevice(Device, nullptr);
         Device = VK_NULL_HANDLE;
     }
+    if (DebugMessenger) {
+        const auto destroyMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(Instance,"vkDestroyDebugUtilsMessengerEXT"));
+        if (destroyMessenger) { destroyMessenger(Instance,DebugMessenger,nullptr); }
+        DebugMessenger = VK_NULL_HANDLE;
+    }
     if (Instance) { vkDestroyInstance(Instance, nullptr); Instance = VK_NULL_HANDLE; }
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL VulkanContext::ReportValidation(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT* data, void* userData) {
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) { static_cast<VulkanContext*>(userData)->ValidationErrors.fetch_add(1); }
+    std::cerr << "Vulkan validation: " << (data && data->pMessage ? data->pMessage : "message unavailable") << '\n';
+    return VK_FALSE;
 }
 
 uint32_t VulkanContext::FindMemoryType(uint32_t bits, VkMemoryPropertyFlags flags) const {

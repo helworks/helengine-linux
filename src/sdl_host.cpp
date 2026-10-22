@@ -52,6 +52,11 @@ bool SdlHost::PollEvent(SDL_Event& event) {
     return SDL_PollEvent(&event);
 }
 
+void SdlHost::SetWindowSize(int width, int height) {
+    if (width <= 0 || height <= 0) { throw std::invalid_argument("Logical SDL window size must be positive; minimization is a separate lifecycle event."); }
+    if (!SDL_SetWindowSize(Window,width,height)) { throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError()); }
+}
+
 bool SdlHost::RecreateSwapchain() {
     auto drawable = GetDrawableSize(); if (!drawable.width || !drawable.height) { return false; }
     VkSurfaceCapabilitiesKHR capabilities {};

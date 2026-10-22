@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <atomic>
 
 namespace helengine::linux {
 /// <summary>Owns Vulkan instance, selected graphics device, queue and transient commands; never requests a desktop surface implicitly.</summary>
@@ -28,6 +29,8 @@ public:
     uint32_t GetQueueFamily() const { return QueueFamily; }
     /// <summary>Returns the selected device properties for truthful device diagnostics.</summary>
     const VkPhysicalDeviceProperties& GetProperties() const { return Properties; }
+    /// <summary>Returns validation errors captured by the explicit debug messenger; tests reject nonzero counts.</summary>
+    uint32_t GetValidationErrorCount() const { return ValidationErrors.load(); }
     /// <summary>Finds a compatible memory type or rejects unsupported requested memory flags.</summary>
     uint32_t FindMemoryType(uint32_t bits, VkMemoryPropertyFlags flags) const;
     /// <summary>Allocates and begins one primary command buffer for a synchronous upload/render transaction.</summary>
@@ -39,6 +42,8 @@ public:
 private:
     /// <summary>Releases initialized handles, including partially initialized constructor state.</summary>
     void Release() noexcept;
+    /// <summary>Counts validation errors and emits their original contextual messages without throwing through the Vulkan callback ABI.</summary>
+    static VKAPI_ATTR VkBool32 VKAPI_CALL ReportValidation(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT* data, void* userData);
     /// <summary>Owns the Vulkan loader instance.</summary>
     VkInstance Instance = VK_NULL_HANDLE;
     /// <summary>Borrows the selected physical graphics device from Instance.</summary>
@@ -53,5 +58,9 @@ private:
     uint32_t QueueFamily = UINT32_MAX;
     /// <summary>Stores actual API/device capabilities for logging and feature checks.</summary>
     VkPhysicalDeviceProperties Properties {};
+    /// <summary>Owns the explicit validation messenger when diagnostic validation was requested.</summary>
+    VkDebugUtilsMessengerEXT DebugMessenger = VK_NULL_HANDLE;
+    /// <summary>Counts asynchronous driver-layer error messages for test and runtime diagnostics.</summary>
+    std::atomic<uint32_t> ValidationErrors {0};
 };
 }
