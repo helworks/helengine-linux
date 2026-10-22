@@ -278,6 +278,8 @@ public static class LinuxPlatformDefinitionFactory {
                     PlatformCodegenLanguage.Cpp,
                     PlatformSerializationEndianness.LittleEndian,
                     [
+                        new PlatformSettingDefinition("generated-math-convention", "Generated Math Convention", PlatformSettingKind.Text, "engine-row-vector", true, []),
+                        new PlatformSettingDefinition("pointer-size-bytes", "Pointer Size Bytes", PlatformSettingKind.Text, "8", true, []),
                         new PlatformSettingDefinition(
                             "write-conversion-report",
                             "Write Conversion Report",

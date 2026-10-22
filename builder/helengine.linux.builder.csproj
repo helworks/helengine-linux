@@ -8,5 +8,6 @@
     <ProjectReference Include="$(HelEngineRoot)/engine/helengine.baseplatform/helengine.baseplatform.csproj" />
     <ProjectReference Include="$(HelEngineRoot)/engine/helengine.core/helengine.core.csproj" />
     <ProjectReference Include="$(HelEngineRoot)/engine/helengine.files/helengine.files.csproj" />
+    <ProjectReference Include="$(HelEngineRoot)/engine/helengine.vulkan/helengine.vulkan.csproj" />
   </ItemGroup>
 </Project>

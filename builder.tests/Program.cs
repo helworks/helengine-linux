@@ -6,6 +6,9 @@ internal static class Program {
     static async Task<int> Main() {
         try {
             LinuxPlatformAssetBuilder builder = new();
+            helengine.ShaderBackendRegistry shaderBackends = new();
+            builder.RegisterShaderBackends(shaderBackends);
+            if (!shaderBackends.ContainsTarget(helengine.ShaderCompileTarget.Vulkan)) { throw new InvalidOperationException("Linux builder must contribute the real Vulkan SPIR-V shader compiler."); }
             if (builder.Definition.PlatformId != "linux" || builder.Definition.GraphicsProfiles.Single().ProfileId != "vulkan") {
                 throw new InvalidOperationException("Linux/Vulkan metadata was not published.");
             }

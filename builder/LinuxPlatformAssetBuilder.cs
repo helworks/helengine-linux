@@ -4,16 +4,22 @@ using helengine.baseplatform.Descriptors;
 using helengine.baseplatform.Reporting;
 using helengine.baseplatform.Requests;
 using helengine.baseplatform.Results;
+using helengine;
 
 namespace helengine.linux.builder;
 
 /// <summary>Publishes Linux Vulkan build metadata and routes resolved cook/build requests to the Linux-owned native pipeline.</summary>
-public sealed class LinuxPlatformAssetBuilder : IPlatformAssetBuilder, IPlatformLayoutTargetProvider {
+public sealed class LinuxPlatformAssetBuilder : IPlatformAssetBuilder, IPlatformLayoutTargetProvider, IShaderBackendRegistryContributor {
     /// <summary>Identifies the native Linux builder without claiming editor Play integration.</summary>
     public PlatformBuilderDescriptor Descriptor { get; } = new("helengine.linux.builder", "1.0.0", "Linux Vulkan",
         new EngineCompatibilityRange("1.0.0","999.0.0"),new ManifestCompatibilityRange(1,1),["linux"],["debug","release","profiler"]);
     /// <summary>Exposes immutable profile/schema metadata consumed by the editor and portable CLI.</summary>
     public PlatformDefinition Definition { get; } = LinuxPlatformDefinitionFactory.Create();
+    /// <summary>Registers the engine's existing HLSL-to-SPIR-V compiler without initializing its managed Vulkan renderer or Win32 surface code.</summary>
+    public void RegisterShaderBackends(ShaderBackendRegistry shaderBackendRegistry) {
+        ArgumentNullException.ThrowIfNull(shaderBackendRegistry);
+        shaderBackendRegistry.Register(new helengine.vulkan.VulkanShaderBackend());
+    }
     /// <summary>Preserves authored shader names, constant buffers and texture dependencies in the shared binary material contract.</summary>
     public PlatformMaterialCookResult CookMaterial(PlatformMaterialCookRequest request) { return LinuxMaterialCooker.Cook(request); }
     /// <summary>Stages the resolved content and runs the native player build, preserving compiler failures and cancellation.</summary>

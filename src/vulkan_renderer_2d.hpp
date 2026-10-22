@@ -21,6 +21,10 @@ public:
     VulkanRenderer2D& operator=(const VulkanRenderer2D&) = delete;
     /// <summary>Uploads a validated RGBA8 texture, returning a renderer-local stable handle.</summary>
     size_t CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> rgba);
+    /// <summary>Uploads a bounded RGBA8 region with explicit source pitch, waiting before old texture memory can be modified.</summary>
+    void UpdateTextureRegion(size_t texture, uint32_t x, uint32_t y, uint32_t width, uint32_t height, std::span<const uint8_t> rgba, uint32_t rowPitch);
+    /// <summary>Frees a runtime texture and its descriptor after GPU completion while keeping other texture handles stable.</summary>
+    void ReleaseTexture(size_t texture);
     /// <summary>Recreates a target only for a nonzero drawable size; minimized windows retain their last valid target.</summary>
     bool Resize(uint32_t width, uint32_t height);
     /// <summary>Begins a frame with an explicit clear color and an empty clipping stack.</summary>

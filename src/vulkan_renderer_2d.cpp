@@ -46,7 +46,7 @@ void VulkanRenderer2D::InitializePipeline() {
     VkDescriptorSetLayoutCreateInfo descriptor {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; descriptor.bindingCount = 1; descriptor.pBindings = &binding;
     VulkanContext::Require(vkCreateDescriptorSetLayout(device, &descriptor, nullptr, &DescriptorLayout), "vkCreateDescriptorSetLayout");
     VkDescriptorPoolSize poolSize {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4096};
-    VkDescriptorPoolCreateInfo pool {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO}; pool.maxSets = 4096; pool.poolSizeCount = 1; pool.pPoolSizes = &poolSize;
+    VkDescriptorPoolCreateInfo pool {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO}; pool.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT; pool.maxSets = 4096; pool.poolSizeCount = 1; pool.pPoolSizes = &poolSize;
     VulkanContext::Require(vkCreateDescriptorPool(device, &pool, nullptr, &DescriptorPool), "vkCreateDescriptorPool");
     VkSamplerCreateInfo sampler {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO}; sampler.magFilter = VK_FILTER_NEAREST; sampler.minFilter = VK_FILTER_NEAREST;
     sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; sampler.addressModeU = sampler.addressModeV = sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -133,6 +133,35 @@ size_t VulkanRenderer2D::CreateTexture(uint32_t width, uint32_t height, std::spa
     const size_t handle = Textures.size(); Textures.push_back(std::move(image)); TextureSets.push_back(descriptor); return handle;
 }
 
+void VulkanRenderer2D::UpdateTextureRegion(size_t texture, uint32_t x, uint32_t y, uint32_t width, uint32_t height, std::span<const uint8_t> rgba, uint32_t rowPitch) {
+    if (FrameActive) { throw std::logic_error("Texture regions must be updated before BeginFrame."); }
+    if (texture >= Textures.size() || !Textures[texture]) { throw std::out_of_range("Cannot update a missing or released runtime texture."); }
+    const auto& image = *Textures[texture];
+    const uint64_t rowBytes = static_cast<uint64_t>(width) * 4;
+    if (!width || !height || x >= image.GetWidth() || y >= image.GetHeight() || width > image.GetWidth() - x || height > image.GetHeight() - y
+        || rowPitch < rowBytes || static_cast<uint64_t>(height - 1) * rowPitch + rowBytes > rgba.size()) {
+        throw std::invalid_argument("Runtime texture region dimensions, bounds or source row pitch are invalid.");
+    }
+    GpuBuffer staging(Context, rowBytes * height, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    auto* destination = static_cast<uint8_t*>(staging.Map());
+    for (uint32_t row = 0; row < height; ++row) { std::memcpy(destination + row * rowBytes, rgba.data() + static_cast<size_t>(row) * rowPitch, rowBytes); }
+    staging.Unmap();
+    VkCommandBuffer commands = Context.BeginCommands();
+    Transition(commands,image.Get(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
+    VkBufferImageCopy copy {}; copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,0,0,1}; copy.imageOffset = {static_cast<int32_t>(x),static_cast<int32_t>(y),0}; copy.imageExtent = {width,height,1};
+    vkCmdCopyBufferToImage(commands,staging.Get(),image.Get(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
+    Transition(commands,image.Get(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT);
+    Context.SubmitAndWait(commands);
+}
+
+void VulkanRenderer2D::ReleaseTexture(size_t texture) {
+    if (FrameActive) { throw std::logic_error("Runtime textures must be released outside an active frame."); }
+    if (texture >= Textures.size() || !Textures[texture]) { throw std::out_of_range("Cannot release a missing or already released runtime texture."); }
+    VulkanContext::Require(vkDeviceWaitIdle(Context.GetDevice()),"vkDeviceWaitIdle(texture release)");
+    VulkanContext::Require(vkFreeDescriptorSets(Context.GetDevice(),DescriptorPool,1,&TextureSets[texture]),"vkFreeDescriptorSets(texture release)");
+    TextureSets[texture] = VK_NULL_HANDLE; Textures[texture].reset();
+}
+
 void VulkanRenderer2D::BeginFrame(std::array<float,4> clear) {
     if (FrameActive) { throw std::logic_error("Vulkan frame is already active."); }
     std::copy(clear.begin(), clear.end(), Clear.color.float32); Vertices.clear(); DrawTextures.clear(); DrawClips.clear(); Clips.clear(); FrameActive = true;
@@ -140,7 +169,7 @@ void VulkanRenderer2D::BeginFrame(std::array<float,4> clear) {
 
 void VulkanRenderer2D::DrawQuad(size_t texture, const std::array<QuadVertex,6>& vertices) {
     if (!FrameActive) { throw std::logic_error("DrawQuad requires BeginFrame."); }
-    if (texture >= TextureSets.size()) { throw std::out_of_range("Required runtime texture handle is not uploaded."); }
+    if (texture >= TextureSets.size() || !Textures[texture]) { throw std::out_of_range("Required runtime texture handle is not uploaded."); }
     const VkRect2D clip = Clips.empty() ? VkRect2D{{0,0},{Width,Height}} : Clips.back();
     if (!clip.extent.width || !clip.extent.height) { return; }
     Vertices.insert(Vertices.end(), vertices.begin(), vertices.end()); DrawTextures.push_back(texture); DrawClips.push_back(clip);
