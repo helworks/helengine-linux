@@ -31,6 +31,8 @@ def main():
         command = [options.player,"--content",options.content,"--scene",scene,"--offscreen","--frames",str(options.tracer_frames if tracing else 10),"--validation"]
         if tracing:
             command.append("--require-tracer-progress")
+        if scene in ["directional_shadow_plaza","pbr_shadow_theater"]:
+            command.append("--require-shadow-reception")
         started = time.monotonic()
         try:
             result = subprocess.run(command,capture_output=True,text=True,env=os.environ.copy(),timeout=240)
@@ -41,6 +43,8 @@ def main():
             if scene in ["directional_shadow_plaza","pbr_shadow_theater"]:
                 shadow_samples = re.search(r"\bshadow_visible_samples=(\d+)",output)
                 passed = passed and shadow_samples is not None and int(shadow_samples.group(1))>0
+                received = re.search(r"\bshadow_receiver_changed_pixels=(\d+)",output)
+                passed = passed and received is not None and int(received.group(1))>0 and "shadow_receiver_restored=1" in output
             record = {"scene":scene,"passed":passed,"seconds":round(time.monotonic()-started,3),"exitCode":result.returncode,"evidence":output}
         except subprocess.TimeoutExpired as error:
             record = {"scene":scene,"passed":False,"seconds":round(time.monotonic()-started,3),"error":"Player exceeded the explicit 240-second validation limit.","evidence":str(error.stdout or "")+str(error.stderr or "")}

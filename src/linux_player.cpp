@@ -119,6 +119,27 @@ void LinuxPlayer::ValidateSoftwareTracer(::Core* core,bool requireProgress,const
     if (requireProgress && !found) { throw std::runtime_error("Strict software tracing validation found no active generated tracing component."); }
 }
 
+void LinuxPlayer::ValidateShadowReception(::Core* core,LinuxRenderManager3D& renderer,uint32_t width,uint32_t height) {
+    if (!renderer.get_ShadowsEnabled()) { throw std::runtime_error("Shadow reception validation requires authored shadows enabled in the runtime manifest."); }
+    core->Draw(); const auto enabled=renderer.GetLastPixels();
+    renderer.set_ShadowsEnabled(false);
+    try { core->Draw(); }
+    catch (...) { renderer.set_ShadowsEnabled(true); throw; }
+    const auto disabled=renderer.GetLastPixels();
+    renderer.set_ShadowsEnabled(true); core->Draw(); const auto& restored=renderer.GetLastPixels();
+    if (enabled.size()!=static_cast<size_t>(width)*height*4 || disabled.size()!=enabled.size() || restored.size()!=enabled.size()) { throw std::runtime_error("Shadow reception validation received an incomplete GPU frame."); }
+    size_t changed=0;
+    for (uint32_t y=height/4;y<height*3/4;++y) {
+        for (uint32_t x=width/4;x<width*3/4;++x) {
+            const size_t offset=(static_cast<size_t>(y)*width+x)*4;
+            if (enabled[offset]!=disabled[offset] || enabled[offset+1]!=disabled[offset+1] || enabled[offset+2]!=disabled[offset+2]) { ++changed; }
+        }
+    }
+    const bool exact=enabled==restored;
+    std::cout << "shadow_receiver_changed_pixels=" << changed << " shadow_receiver_restored=" << exact << '\n';
+    if (!changed || !exact) { throw std::runtime_error("Frozen generated scene did not receive real shadows or failed exact on/off/on restoration."); }
+}
+
 int LinuxPlayer::Run(const LinuxRunOptions& options) {
     std::unique_ptr<LinuxInputReplay> replay;
     if (!options.InputScript.empty()) { std::ifstream script(options.InputScript); replay=std::make_unique<LinuxInputReplay>(script); }
@@ -171,12 +192,13 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
             if (window) { window->Present(renderer); } ++frames;
         }
         if (replay && !replay->IsComplete()) { throw std::runtime_error("Linux player stopped before all explicit input replay events were captured."); }
+        if (options.RequireShadowReception) { ValidateShadowReception(&core,render3d,renderer.GetWidth(),renderer.GetHeight()); }
         if (graphics.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation errors occurred during actual generated-core execution."); }
         uint64_t checksum=1469598103934665603ULL;
         for (uint8_t byte : render3d.GetLastPixels()) { checksum=(checksum^byte)*1099511628211ULL; }
         bool nonuniform=false; const auto& pixels=render3d.GetLastPixels();
         for (size_t index=4;index+3<pixels.size();index+=4) { if (pixels[index]!=pixels[0] || pixels[index+1]!=pixels[1] || pixels[index+2]!=pixels[2] || pixels[index+3]!=pixels[3]) { nonuniform=true; break; } }
-        std::cout << "core_frames=" << frames << " draw_calls=" << render3d.get_LastDrawCallCount() << " mesh_visible_samples=" << render3d.GetLastVisibleMeshSamples() << " rgba_bytes=" << pixels.size() << " checksum=" << checksum << " nonuniform=" << nonuniform << '\n';
+        std::cout << "core_frames=" << frames << " draw_calls=" << render3d.get_LastDrawCallCount() << " mesh_visible_samples=" << render3d.GetLastVisibleMeshSamples() << " shadow_visible_samples=" << render3d.GetLastVisibleShadowSamples() << " rgba_bytes=" << pixels.size() << " checksum=" << checksum << " nonuniform=" << nonuniform << '\n';
         ValidateSoftwareTracer(&core,options.RequireTracerProgress,pixels,renderer.GetWidth(),renderer.GetHeight());
         if (options.Offscreen && (!frames || render3d.get_LastDrawCallCount()<=0 || !nonuniform)) { throw std::runtime_error("Generated-core offscreen run did not produce drawable content; this is not a successful menu validation."); }
         coreNeedsShutdown=false; core.Dispose();

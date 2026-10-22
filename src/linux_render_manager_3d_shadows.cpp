@@ -112,13 +112,13 @@ void LinuxRenderManager3D::PrepareCameraShadows(::ICamera* camera) {
         if (light->get_LightType()==::LightType::Point) {
             if (PointShadows[pointIndex]==SIZE_MAX) { PointShadows[pointIndex]=MeshRenderer.CreatePointShadow(512); }
             CurrentPointShadows[pointIndex]=PointShadows[pointIndex]; values[offset+6]=2; values[offset+7]=static_cast<float>(pointIndex);
-            for (int face=0;face<6;++face) { const auto projection=BuildShadowViewProjection(camera,light,face); QueueShadowCasters(light,projection); MeshRenderer.RenderShadowPass(PointShadows[pointIndex],face,true); }
+            for (int face=0;face<6;++face) { const auto projection=BuildShadowViewProjection(camera,light,face); QueueShadowCasters(light,projection); MeshRenderer.RenderShadowPass(PointShadows[pointIndex],face,true); LastVisibleShadowSamples+=MeshRenderer.GetLastShadowSamples(); }
             ++pointIndex;
         } else {
             const VkRect2D region {{static_cast<int32_t>(atlasIndex%grid)*static_cast<int32_t>(tile),static_cast<int32_t>(atlasIndex/grid)*static_cast<int32_t>(tile)},{tile,tile}};
             values[offset]=static_cast<float>(region.offset.x)/2048; values[offset+1]=static_cast<float>(region.offset.y)/2048; values[offset+2]=values[offset+3]=static_cast<float>(tile)/2048; values[offset+6]=1;
             const auto projection=BuildShadowViewProjection(camera,light,-1); std::vector<uint8_t> matrix; AppendShaderMatrix(matrix,projection); std::memcpy(values.data()+offset+8,matrix.data(),64);
-            QueueShadowCasters(light,projection); MeshRenderer.RenderShadowPass(ShadowAtlas,0,false,region); ++atlasIndex;
+            QueueShadowCasters(light,projection); MeshRenderer.RenderShadowPass(ShadowAtlas,0,false,region); LastVisibleShadowSamples+=MeshRenderer.GetLastShadowSamples(); ++atlasIndex;
         }
     }
     CurrentShadows.resize(sizeof(values)); std::memcpy(CurrentShadows.data(),values.data(),sizeof(values));

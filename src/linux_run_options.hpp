@@ -20,6 +20,8 @@ public:
     bool Validation = false;
     /// <summary>Requires an actual software tracing sample pass and central GPU image variation instead of accepting a visible HUD as scene validation.</summary>
     bool RequireTracerProgress=false;
+    /// <summary>Checks real shadow receiver pixels by drawing one frozen Core frame with shadows enabled, disabled, then restored.</summary>
+    bool RequireShadowReception=false;
     /// <summary>Limits execution for reproducible smoke tests; zero means run until the SDL quit event.</summary>
     uint32_t Frames = 0;
 };

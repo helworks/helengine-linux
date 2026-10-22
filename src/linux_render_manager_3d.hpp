@@ -51,6 +51,8 @@ public:
     const std::vector<uint8_t>& GetLastPixels() const { return LastPixels; }
     /// <summary>Reports actual Vulkan occlusion samples from generated mesh passes, excluding all UI draws.</summary>
     uint64_t GetLastVisibleMeshSamples() const { return LastVisibleMeshSamples; }
+    /// <summary>Reports actual depth-tested caster samples from all shadow atlas tiles and cube faces in the latest frame.</summary>
+    uint64_t GetLastVisibleShadowSamples() const { return LastVisibleShadowSamples; }
 private:
     /// <summary>Finds the exact authored program and stage rather than substituting a default shader.</summary>
     static ::ShaderProgramAsset* FindProgram(::ShaderAsset* shader,HeCppString name,::ShaderStage stage);
@@ -122,5 +124,7 @@ private:
     int32_t LastDrawCalls = 0;
     /// <summary>Accumulates the hardware visibility results of all cameras' latest completed color mesh passes.</summary>
     uint64_t LastVisibleMeshSamples=0;
+    /// <summary>Accumulates hardware visibility results from real shadow passes, excluding disabled neutral resources.</summary>
+    uint64_t LastVisibleShadowSamples=0;
 };
 }

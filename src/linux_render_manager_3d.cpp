@@ -107,7 +107,7 @@ void LinuxRenderManager3D::Draw() {
     auto* registered = get_OwnerCore()->get_ObjectManager()->get_Cameras();
     if (registered) { for (int32_t index=0;index<registered->get_Count();++index) { auto* camera = (*registered)[index]; if (camera && camera->get_Parent() && camera->get_Parent()->get_IsHierarchyEnabled() && IsCameraVisibleInWindow(camera,get_MainWindowHandle())) { cameras.push_back(camera); } } }
     std::stable_sort(cameras.begin(),cameras.end(),[](auto* left,auto* right) { return left->get_CameraDrawOrder() < right->get_CameraDrawOrder(); });
-    LastDrawCalls=0; LastVisibleMeshSamples=0; bool initialized=false;
+    LastDrawCalls=0; LastVisibleMeshSamples=0; LastVisibleShadowSamples=0; bool initialized=false;
     for (auto* camera : cameras) {
         if (camera->get_RenderTarget()) { throw std::runtime_error("Linux native offscreen camera RenderTarget resources are not implemented."); }
         auto settings=camera->get_ClearSettings(); auto color=settings.ClearColor;
