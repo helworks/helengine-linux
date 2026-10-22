@@ -1,0 +1,28 @@
+# Enters the real baked menu, navigates every preceding scene option, opens the
+# ray-tracing panel and accepts software_path_tracer through ordinary SDL input.
+5 down pad:a
+6 up pad:a
+12 down pad:dpdown
+13 up pad:dpdown
+15 down pad:dpdown
+16 up pad:dpdown
+18 down pad:dpdown
+19 up pad:dpdown
+21 down pad:dpdown
+22 up pad:dpdown
+24 down pad:dpdown
+25 up pad:dpdown
+27 down pad:dpdown
+28 up pad:dpdown
+30 down pad:dpdown
+31 up pad:dpdown
+33 down pad:dpdown
+34 up pad:dpdown
+36 down pad:dpdown
+37 up pad:dpdown
+39 down pad:dpdown
+40 up pad:dpdown
+45 down pad:a
+46 up pad:a
+55 down pad:a
+56 up pad:a
