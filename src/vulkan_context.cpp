@@ -109,13 +109,16 @@ VkCommandBuffer VulkanContext::BeginCommands() {
     return commands;
 }
 
-void VulkanContext::SubmitAndWait(VkCommandBuffer commands) {
+void VulkanContext::SubmitAndWait(VkCommandBuffer commands, VkSemaphore wait, VkSemaphore signal) {
     VkFence fence = VK_NULL_HANDLE;
     try {
         Require(vkEndCommandBuffer(commands), "vkEndCommandBuffer");
         VkFenceCreateInfo create {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
         Require(vkCreateFence(Device, &create, nullptr, &fence), "vkCreateFence");
+        const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         VkSubmitInfo submit {VK_STRUCTURE_TYPE_SUBMIT_INFO}; submit.commandBufferCount = 1; submit.pCommandBuffers = &commands;
+        submit.waitSemaphoreCount = wait ? 1 : 0; submit.pWaitSemaphores = wait ? &wait : nullptr; submit.pWaitDstStageMask = wait ? &waitStage : nullptr;
+        submit.signalSemaphoreCount = signal ? 1 : 0; submit.pSignalSemaphores = signal ? &signal : nullptr;
         Require(vkQueueSubmit(Queue, 1, &submit, fence), "vkQueueSubmit");
         Require(vkWaitForFences(Device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences");
     } catch (...) {

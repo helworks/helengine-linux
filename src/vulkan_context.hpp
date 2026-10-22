@@ -33,7 +33,7 @@ public:
     /// <summary>Allocates and begins one primary command buffer for a synchronous upload/render transaction.</summary>
     VkCommandBuffer BeginCommands();
     /// <summary>Submits commands and waits on a fence before freeing the command buffer or allowing resources to be reused.</summary>
-    void SubmitAndWait(VkCommandBuffer commands);
+    void SubmitAndWait(VkCommandBuffer commands, VkSemaphore wait = VK_NULL_HANDLE, VkSemaphore signal = VK_NULL_HANDLE);
     /// <summary>Throws a contextual native exception when a Vulkan operation does not succeed.</summary>
     static void Require(VkResult result, const char* operation);
 private:

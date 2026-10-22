@@ -1,0 +1,90 @@
+#pragma once
+#include "gpu_buffer.hpp"
+#include "gpu_image.hpp"
+#include "quad_vertex.hpp"
+#include <array>
+#include <memory>
+#include <span>
+#include <vector>
+
+namespace helengine::linux {
+/// <summary>Renders ordered textured quads into a synchronized RGBA8 target; this low-level renderer has no simulation or generated-core dependency.</summary>
+class VulkanRenderer2D final {
+public:
+    /// <summary>Creates render-pass, texture descriptors and the Vulkan 1.1 quad pipeline.</summary>
+    VulkanRenderer2D(VulkanContext& context, uint32_t width, uint32_t height);
+    /// <summary>Synchronizes and releases framebuffer, pipeline and descriptor resources in dependency order.</summary>
+    ~VulkanRenderer2D();
+    /// <summary>Prevents duplicating ownership of descriptors and pipeline state.</summary>
+    VulkanRenderer2D(const VulkanRenderer2D&) = delete;
+    /// <summary>Prevents copying GPU state through assignment.</summary>
+    VulkanRenderer2D& operator=(const VulkanRenderer2D&) = delete;
+    /// <summary>Uploads a validated RGBA8 texture, returning a renderer-local stable handle.</summary>
+    size_t CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> rgba);
+    /// <summary>Recreates a target only for a nonzero drawable size; minimized windows retain their last valid target.</summary>
+    bool Resize(uint32_t width, uint32_t height);
+    /// <summary>Begins a frame with an explicit clear color and an empty clipping stack.</summary>
+    void BeginFrame(std::array<float, 4> clear);
+    /// <summary>Appends six ordered vertices with normalized UVs and the currently active clip rectangle.</summary>
+    void DrawQuad(size_t texture, const std::array<QuadVertex, 6>& vertices);
+    /// <summary>Appends one axis-aligned rectangle, primarily for glyph bounds, shapes and GPU contract tests.</summary>
+    void DrawRect(size_t texture, float x, float y, float width, float height, std::array<float,4> color);
+    /// <summary>Intersects a new pixel-space scissor with the active stack and framebuffer bounds.</summary>
+    void PushClip(float x, float y, float width, float height);
+    /// <summary>Restores the previous scissor; malformed command streams fail rather than leaking clip state.</summary>
+    void PopClip();
+    /// <summary>Submits one render pass, synchronizes GPU writes and returns tightly packed RGBA8 bytes for offscreen verification.</summary>
+    std::vector<uint8_t> EndFrameAndReadback();
+    /// <summary>Returns the final transfer-source image for presentation on the same device.</summary>
+    VkImage GetOutputImage() const { return Target->Get(); }
+    /// <summary>Returns the valid target pixel width.</summary>
+    uint32_t GetWidth() const { return Width; }
+    /// <summary>Returns the valid target pixel height.</summary>
+    uint32_t GetHeight() const { return Height; }
+private:
+    /// <summary>Creates descriptor layout, sampler, render pass and shader pipeline.</summary>
+    void InitializePipeline();
+    /// <summary>Releases successfully initialized resources after pending submissions complete.</summary>
+    void Release() noexcept;
+    /// <summary>Loads compiled SPIR-V and creates a shader module, rejecting absent or malformed artifacts.</summary>
+    VkShaderModule LoadShader(const char* name);
+    /// <summary>Records one image layout and memory-dependency transition.</summary>
+    static void Transition(VkCommandBuffer commands, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags sourceStage, VkPipelineStageFlags destinationStage, VkAccessFlags sourceAccess, VkAccessFlags destinationAccess);
+    /// <summary>Borrows the graphics context, which must outlive the renderer.</summary>
+    VulkanContext& Context;
+    /// <summary>Owns the current RGBA8 output attachment.</summary>
+    std::unique_ptr<GpuImage> Target;
+    /// <summary>Owns sampled textures in stable handle order.</summary>
+    std::vector<std::unique_ptr<GpuImage>> Textures;
+    /// <summary>Stores one descriptor set per texture; the descriptor pool owns their lifetime.</summary>
+    std::vector<VkDescriptorSet> TextureSets;
+    /// <summary>Stores ordered quad vertices before their single frame upload.</summary>
+    std::vector<QuadVertex> Vertices;
+    /// <summary>Stores descriptor indices for ordered draws.</summary>
+    std::vector<size_t> DrawTextures;
+    /// <summary>Stores the effective scissor associated with each ordered draw.</summary>
+    std::vector<VkRect2D> DrawClips;
+    /// <summary>Stores nested clip state without changing engine command ordering.</summary>
+    std::vector<VkRect2D> Clips;
+    /// <summary>Stores the explicit frame clear value.</summary>
+    VkClearValue Clear {};
+    /// <summary>Owns the target's compatible render pass.</summary>
+    VkRenderPass RenderPass = VK_NULL_HANDLE;
+    /// <summary>Owns the framebuffer bound to Target.</summary>
+    VkFramebuffer Framebuffer = VK_NULL_HANDLE;
+    /// <summary>Owns the sampled-image binding layout.</summary>
+    VkDescriptorSetLayout DescriptorLayout = VK_NULL_HANDLE;
+    /// <summary>Owns bounded sampled-image descriptor allocation.</summary>
+    VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
+    /// <summary>Owns the nearest/clamped sampler used by UI atlases.</summary>
+    VkSampler Sampler = VK_NULL_HANDLE;
+    /// <summary>Owns the vertex/fragment pipeline layout and viewport push constants.</summary>
+    VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
+    /// <summary>Owns the graphics pipeline for ordered transparent UI draws.</summary>
+    VkPipeline Pipeline = VK_NULL_HANDLE;
+    /// <summary>Stores current target geometry in physical pixels.</summary>
+    uint32_t Width = 0, Height = 0;
+    /// <summary>Rejects invalid Begin/Draw/End lifecycle transitions.</summary>
+    bool FrameActive = false;
+};
+}
