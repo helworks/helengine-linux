@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
         try { renderer.DrawRect(atlasTexture,0,0,1,1,{1,1,1,1}); } catch (const std::out_of_range&) { releasedTextureRejected = true; }
         if (!releasedTextureRejected) { throw std::runtime_error("Released runtime texture handle was accepted."); }
         renderer.EndFrameAndReadback();
+        if (context.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation reported errors during GPU contracts."); }
         std::cout << "PASS textured-quads alpha draw-order clipping resize zero-drawable texture-region row-pitch UV resource-release readback\n";
         return 0;
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
