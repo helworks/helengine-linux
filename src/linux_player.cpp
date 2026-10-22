@@ -2,6 +2,7 @@
 #include "generated_disposable_deleter.hpp"
 #include "linux_render_manager_2d.hpp"
 #include "linux_render_manager_3d.hpp"
+#include "linux_input_replay.hpp"
 #include "sdl_input_backend.hpp"
 #include "sdl_host.hpp"
 #include "Core.hpp"
@@ -13,6 +14,7 @@
 #include "RuntimeSceneCatalogEntry.hpp"
 #include "SceneManager.hpp"
 #include "SceneLoadMode.hpp"
+#include "LoadedSceneRecord.hpp"
 #include "GeneratedRuntimeModuleRegistration.hpp"
 #include "StandardPlatformInputConfiguration.hpp"
 #include "StandardPlatformActionBinding.hpp"
@@ -26,6 +28,7 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <fstream>
 #include <stdexcept>
 
 namespace helengine::linux {
@@ -65,6 +68,8 @@ std::string LinuxPlayer::ResolveSceneId(::RuntimeSceneCatalog* catalog,const std
 }
 
 int LinuxPlayer::Run(const LinuxRunOptions& options) {
+    std::unique_ptr<LinuxInputReplay> replay;
+    if (!options.InputScript.empty()) { std::ifstream script(options.InputScript); replay=std::make_unique<LinuxInputReplay>(script); }
     std::unique_ptr<SdlHost> window;
     std::unique_ptr<VulkanContext> offscreen;
     if (options.Offscreen) { offscreen=std::make_unique<VulkanContext>(std::span<const char* const>{},options.Validation,VK_API_VERSION_1_2); }
@@ -91,6 +96,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
         std::cout << "core=generated scene=" << scene << " catalog_count=" << entries->get_Length() << " device=" << graphics.GetProperties().deviceName << '\n';
         core.get_SceneManager()->LoadScene(scene,::SceneLoadMode::Single); core.get_SceneManager()->CommitPendingOperationsAtFrameBoundary();
         bool running=true; uint32_t frames=0; auto previous=std::chrono::steady_clock::now();
+        std::string lastScene;
         while (running && (!options.Frames || frames<options.Frames)) {
             if (window) {
                 SDL_Event event {}; while (window->PollEvent(event)) { input.HandleEvent(event); if (event.type==SDL_EVENT_QUIT) { running=false; } }
@@ -98,12 +104,16 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
                 if (!size.width || !size.height) { SDL_Delay(16); continue; }
                 if (size.width!=renderer.GetWidth() || size.height!=renderer.GetHeight()) { renderer.Resize(size.width,size.height); render3d.OnWindowResize(1,size.width,size.height); }
             }
+            if (replay) { if (options.Offscreen) { input.set_ReceiveInputInBackground(true); } for (const auto& event : replay->EventsForFrame(frames)) { input.HandleEvent(event); std::cout << "replay_frame=" << frames << " scancode=" << event.key.scancode << " down=" << event.key.down << '\n'; } }
             const auto now=std::chrono::steady_clock::now();
             const double elapsed=options.Offscreen ? 1.0/60.0 : std::chrono::duration<double>(now-previous).count(); previous=now;
             const auto updateStart=std::chrono::steady_clock::now(); core.Update(elapsed); const auto drawStart=std::chrono::steady_clock::now(); core.Draw();
             const auto drawEnd=std::chrono::steady_clock::now(); core.SetHostFrameTimings(std::chrono::duration<double,std::milli>(drawStart-updateStart).count(),std::chrono::duration<double,std::milli>(drawEnd-drawStart).count());
+            auto* loaded=core.get_SceneManager()->get_LoadedScenes();
+            if (loaded && loaded->get_Count()>0) { const auto current=(*loaded)[loaded->get_Count()-1]->get_SceneId().raw(); if (current!=lastScene) { std::cout << "loaded_scene_frame=" << frames << " scene=" << current << '\n'; lastScene=current; } }
             if (window) { window->Present(renderer); } ++frames;
         }
+        if (replay && !replay->IsComplete()) { throw std::runtime_error("Linux player stopped before all explicit input replay events were captured."); }
         if (graphics.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation errors occurred during actual generated-core execution."); }
         uint64_t checksum=1469598103934665603ULL;
         for (uint8_t byte : render3d.GetLastPixels()) { checksum=(checksum^byte)*1099511628211ULL; }

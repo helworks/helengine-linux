@@ -12,6 +12,8 @@ public:
     std::string ContentRoot;
     /// <summary>Stores an optional stable scene ID from the packaged runtime catalog.</summary>
     std::string SceneId;
+    /// <summary>Stores an optional explicit validation script whose SDL events enter the ordinary generated input capture path.</summary>
+    std::string InputScript;
     /// <summary>Selects real generated-core rendering without creating a window or reading desktop input.</summary>
     bool Offscreen = false;
     /// <summary>Requests counted Vulkan validation explicitly.</summary>
