@@ -354,6 +354,8 @@ public static class LinuxPlatformDefinitionFactory {
                     PlatformMediaLayoutKind.InstallTree,
                     allowPhysicalDuplication: false,
                     preferLocalityOverDeduplication: false)
-            ]);
+            ], runtimeGenerationContract: new RuntimeGenerationContract(
+                RuntimeMaterialResolutionMode.RawShaderBacked, true, PackagedPathPolicy.ContentRelativeOnly,
+                portableInputPreprocessorSymbols: ["DESKTOP_PLATFORM"]));
     }
 }

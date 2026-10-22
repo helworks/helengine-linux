@@ -6,6 +6,7 @@ internal static class Program {
     static async Task<int> Main() {
         try {
             LinuxPlatformAssetBuilder builder = new();
+            if (!builder.Definition.RuntimeGenerationContract.PortableInputPreprocessorSymbols.Contains("DESKTOP_PLATFORM")) { throw new InvalidOperationException("Linux generated input must retain the portable desktop keyboard contract."); }
             helengine.ShaderBackendRegistry shaderBackends = new();
             builder.RegisterShaderBackends(shaderBackends);
             if (!shaderBackends.ContainsTarget(helengine.ShaderCompileTarget.Vulkan)) { throw new InvalidOperationException("Linux builder must contribute the real Vulkan SPIR-V shader compiler."); }
