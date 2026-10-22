@@ -16,6 +16,9 @@ public static class LinuxBuildWorkspace {
         foreach (PlatformBuildCodeModule module in request.Manifest.CodeModules) { module.RequireNumericPolicy(request.NumericPolicy); }
         string profile = request.SelectedBuildProfileId switch {"debug" => "Debug", "release" => "Release", "profiler" => "Profiler", _ => throw new ArgumentException("Unknown Linux build profile.")};
         bool assetsOnly = request.ExecutionScope == PlatformBuildExecutionScope.AssetsOnly;
+        if (!assetsOnly && profile != "Profiler" && request.SelectedCodegenOptionValues.TryGetValue("codegen-generated-function-profiling", out string generatedProfiling) && bool.TryParse(generatedProfiling, out bool enabled) && enabled) {
+            throw new NotSupportedException($"Linux target 'linux' build profile '{request.SelectedBuildProfileId}' cannot enable 'codegen-generated-function-profiling'; generated scopes require the native 'profiler' profile with Tracy linkage.");
+        }
         string content = Path.GetFullPath(assetsOnly ? Path.Combine(request.WorkingRoot,"content") : request.OutputRoot);
         Directory.CreateDirectory(content);
         List<PlatformBuildItemOutcome> scenes = [];

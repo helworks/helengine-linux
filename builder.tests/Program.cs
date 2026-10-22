@@ -7,6 +7,7 @@ internal static class Program {
         try {
             LinuxPlatformAssetBuilder builder = new();
             GeneratedProfilingMetadataTests.Run(builder.Definition);
+            GeneratedProfilingBuildValidationTests.Run(builder);
             if (builder.Descriptor.TargetPlatformId != builder.Definition.PlatformId) { throw new InvalidOperationException("Runtime platform identity must use the canonical Linux id, never the display name consumed by UI."); }
             if (!builder.Definition.RuntimeGenerationContract.PortableInputPreprocessorSymbols.Contains("DESKTOP_PLATFORM")) { throw new InvalidOperationException("Linux generated input must retain the portable desktop keyboard contract."); }
             helengine.ShaderBackendRegistry shaderBackends = new();
