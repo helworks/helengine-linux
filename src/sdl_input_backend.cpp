@@ -56,6 +56,7 @@ void SdlInputBackend::HandleEvent(const SDL_Event& event) {
 
 ::InputFrameState SdlInputBackend::CaptureFrame() {
     ::InputFrameState frame;
+    auto& gamepadFrames=UseSecondGamepadFrame?SecondGamepadFrame:FirstGamepadFrame; UseSecondGamepadFrame=!UseSecondGamepadFrame;
     const bool active = BackgroundInput || (!Offscreen && SDL_GetKeyboardFocus());
     List<::Keys> keys;
     if (active) { for (int index = 0; index < SDL_SCANCODE_COUNT; ++index) { if (Pressed[index]) { auto key = TranslateScancode(static_cast<SDL_Scancode>(index)); if (key != ::Keys::None) { keys.Add(key); } } } }
@@ -81,7 +82,7 @@ void SdlInputBackend::HandleEvent(const SDL_Event& event) {
     frame.Pointer.SetButtonDown(::InputPointerButton::Back,frame.Mouse.get_XButton1() == ::ButtonState::Pressed);
     frame.Pointer.SetButtonDown(::InputPointerButton::Forward,frame.Mouse.get_XButton2() == ::ButtonState::Pressed);
     for (size_t index=0;index<Gamepads.size();++index) {
-        auto& portable = GamepadFrames[static_cast<int32_t>(index)]; portable = ::InputGamepadState(); auto* gamepad = Gamepads[index]; if (!gamepad || !SDL_GamepadConnected(gamepad) || !active) { continue; }
+        auto& portable = gamepadFrames[static_cast<int32_t>(index)]; portable = ::InputGamepadState(); auto* gamepad = Gamepads[index]; if (!gamepad || !SDL_GamepadConnected(gamepad) || !active) { continue; }
         portable.Connected = true;
         portable.LeftStickX=SDL_GetGamepadAxis(gamepad,SDL_GAMEPAD_AXIS_LEFTX); portable.LeftStickY=static_cast<int16_t>(std::clamp(-static_cast<int>(SDL_GetGamepadAxis(gamepad,SDL_GAMEPAD_AXIS_LEFTY)),-32768,32767));
         portable.RightStickX=SDL_GetGamepadAxis(gamepad,SDL_GAMEPAD_AXIS_RIGHTX); portable.RightStickY=static_cast<int16_t>(std::clamp(-static_cast<int>(SDL_GetGamepadAxis(gamepad,SDL_GAMEPAD_AXIS_RIGHTY)),-32768,32767));
@@ -95,6 +96,6 @@ void SdlInputBackend::HandleEvent(const SDL_Event& event) {
         portable.SetButtonDown(::InputGamepadButton::LeftStick,SDL_GetGamepadButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_STICK)); portable.SetButtonDown(::InputGamepadButton::RightStick,SDL_GetGamepadButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_STICK));
         portable.SetButtonDown(::InputGamepadButton::LeftTrigger,portable.LeftTrigger>16383); portable.SetButtonDown(::InputGamepadButton::RightTrigger,portable.RightTrigger>16383); portable.SetButtonDown(::InputGamepadButton::Home,SDL_GetGamepadButton(gamepad,SDL_GAMEPAD_BUTTON_GUIDE));
     }
-    frame.Gamepads=&GamepadFrames; frame.GamepadCount=static_cast<int32_t>(Gamepads.size()); return frame;
+    frame.Gamepads=&gamepadFrames; frame.GamepadCount=static_cast<int32_t>(Gamepads.size()); return frame;
 }
 }

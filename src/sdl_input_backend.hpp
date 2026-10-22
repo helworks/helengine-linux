@@ -47,7 +47,11 @@ private:
     bool HasPreviousPointer = false;
     /// <summary>Stores native controller ownership in stable portable slots.</summary>
     std::array<SDL_Gamepad*,4> Gamepads {};
-    /// <summary>Owns captured portable controller values for the duration of the host frame.</summary>
-    Array<::InputGamepadState> GamepadFrames {4};
+    /// <summary>Owns one alternating portable snapshot so the generated InputSystem's previous frame remains immutable during the next capture.</summary>
+    Array<::InputGamepadState> FirstGamepadFrame {4};
+    /// <summary>Owns the second portable snapshot; the generated input contract retains only current and previous frame references.</summary>
+    Array<::InputGamepadState> SecondGamepadFrame {4};
+    /// <summary>Selects the next reusable snapshot only after the previously returned buffer has become the older-than-previous frame.</summary>
+    bool UseSecondGamepadFrame=false;
 };
 }
