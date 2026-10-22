@@ -9,6 +9,8 @@ namespace helengine::linux {
 /// <summary>Owns indexed Vulkan meshes and authored SPIR-V pipelines while borrowing the 2D owner's RGBA8 target for synchronous depth-tested rendering.</summary>
 class VulkanMeshRenderer final {
 public:
+    /// <summary>Selects the existing engine's forward, atlas-depth or radial point-shadow attachment contract.</summary>
+    enum class PassKind { Color,DepthShadow,PointShadow };
     /// <summary>Preserves the fixed float32 position, normal and UV vertex contract independently of configurable engine arithmetic.</summary>
     struct Vertex {
         /// <summary>Stores three position components without changing engine matrix conventions.</summary>
@@ -32,6 +34,8 @@ public:
         uint32_t Count = 1;
         /// <summary>Preserves the reflected register space and rejects unsupported sets instead of silently binding them as set zero.</summary>
         uint32_t Set = 0;
+        /// <summary>Preserves the reflected sampled texture dimension; samplers and buffers do not consume this field.</summary>
+        VkImageViewType ViewType = VK_IMAGE_VIEW_TYPE_2D;
     };
     /// <summary>Supplies one immutable uniform snapshot, copied when the draw is queued.</summary>
     struct BufferBinding {
@@ -46,6 +50,8 @@ public:
         uint32_t Slot;
         /// <summary>Supplies live same-device image/sampler handles in shader-read layout, never transferring ownership.</summary>
         VkDescriptorImageInfo Image;
+        /// <summary>Matches the owner's actual view dimension to the reflected 2D or cube resource type.</summary>
+        VkImageViewType ViewType = VK_IMAGE_VIEW_TYPE_2D;
     };
     /// <summary>Translates the existing MaterialRenderState enum values without changing asset formats or silently substituting renderer defaults.</summary>
     struct MaterialState {
@@ -72,6 +78,8 @@ public:
     size_t UploadMaterial(std::span<const uint32_t> vertex,std::string vertexEntry,std::span<const uint32_t> fragment,std::string fragmentEntry,std::span<const BindingLayout> bindings);
     /// <summary>Creates an authored pipeline preserving the material's explicit blend, cull and depth state.</summary>
     size_t UploadMaterial(std::span<const uint32_t> vertex,std::string vertexEntry,std::span<const uint32_t> fragment,std::string fragmentEntry,std::span<const BindingLayout> bindings,MaterialState renderState);
+    /// <summary>Creates a real builtin atlas-depth or R32 radial-cube pipeline using the unchanged authored SPIR-V programs and uniform layouts.</summary>
+    size_t UploadMaterial(std::span<const uint32_t> vertex,std::string vertexEntry,std::span<const uint32_t> fragment,std::string fragmentEntry,std::span<const BindingLayout> bindings,MaterialState renderState,PassKind pass);
     /// <summary>Validates all reflected resources and submesh bounds before copying one draw's uniform snapshots into the queue.</summary>
     void QueueDraw(size_t mesh,size_t material,std::span<const BufferBinding> buffers,std::span<const ImageBinding> images,uint32_t firstIndex=0,uint32_t indexCount=0);
     /// <summary>Clears or loads a borrowed RGBA8 image, renders queued indexed geometry with a fresh depth attachment and leaves color in COLOR_ATTACHMENT_OPTIMAL for the 2D LOAD pass.</summary>
@@ -79,6 +87,20 @@ public:
     void RenderFrame(VkImageView target,uint32_t width,uint32_t height,std::array<float,4> clear,bool loadExistingColor=false);
     /// <summary>Renders one camera within a validated physical-pixel viewport and matching scissor while preserving the whole target's clear/load policy.</summary>
     void RenderFrame(VkImageView target,uint32_t width,uint32_t height,std::array<float,4> clear,bool loadExistingColor,VkRect2D viewport);
+    /// <summary>Creates a sampleable D32 atlas initialized to depth one; requested shadows still require actual caster passes.</summary>
+    size_t CreateDepthShadow(uint32_t width,uint32_t height);
+    /// <summary>Creates an R32_FLOAT cube with six renderable faces initialized to radial depth one, matching EditorPointShadowDepth.hlsl.</summary>
+    size_t CreatePointShadow(uint32_t resolution);
+    /// <summary>Returns live owned shadow sampling handles without transferring their lifetime to the caller.</summary>
+    VkDescriptorImageInfo GetShadowDescriptor(size_t texture) const;
+    /// <summary>Returns the actual two-dimensional or cube view type for explicit reflected dimension validation.</summary>
+    VkImageViewType GetShadowViewType(size_t texture) const;
+    /// <summary>Renders queued caster draws into one complete atlas or cube face, then synchronizes and makes the result shader-readable.</summary>
+    void RenderShadowPass(size_t texture,uint32_t face=0,bool clear=true);
+    /// <summary>Renders one atlas allocation without disturbing other tiles when clear is false; matrices and per-caster uniforms remain the provider's existing engine contract.</summary>
+    void RenderShadowPass(size_t texture,uint32_t face,bool clear,VkRect2D viewport);
+    /// <summary>Releases an owned shadow texture only when no queued draw borrows its image or sampler.</summary>
+    void ReleaseShadowTexture(size_t texture);
     /// <summary>Rejects releasing a mesh referenced by queued work.</summary>
     void ReleaseMesh(size_t mesh);
     /// <summary>Rejects releasing a material referenced by queued work.</summary>
