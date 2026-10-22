@@ -48,6 +48,13 @@ int main(int argc, char** argv) {
         try { renderer.DrawRect(atlasTexture,0,0,1,1,{1,1,1,1}); } catch (const std::out_of_range&) { releasedTextureRejected = true; }
         if (!releasedTextureRejected) { throw std::runtime_error("Released runtime texture handle was accepted."); }
         renderer.EndFrameAndReadback();
+        renderer.Resize(64,64); renderer.BeginFrame({0,0,0,1});
+        renderer.DrawRoundedRect(8,8,48,48,12,4,15,{1,0,0,1},{0,1,0,1});
+        pixels = renderer.EndFrameAndReadback();
+        const size_t shapeCorner = (8 * 64 + 8) * 4, shapeCenter = (32 * 64 + 32) * 4, shapeBorder = (9 * 64 + 32) * 4;
+        if (pixels[shapeCorner] != 0 || pixels[shapeCorner+1] != 0 || pixels[shapeCenter] != 255 || pixels[shapeCenter+1] != 0 || pixels[shapeBorder] != 0 || pixels[shapeBorder+1] != 255) {
+            throw std::runtime_error("GPU rounded rectangle fill, border or corner coverage failed.");
+        }
         if (context.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation reported errors during GPU contracts."); }
         std::cout << "PASS textured-quads alpha draw-order clipping resize zero-drawable texture-region row-pitch UV resource-release readback\n";
         return 0;
