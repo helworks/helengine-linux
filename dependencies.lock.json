@@ -1,0 +1,13 @@
+{
+  "platform": "ubuntu-26.04-amd64",
+  "repository": "http://archive.ubuntu.com/ubuntu",
+  "suite": "resolute",
+  "vulkanMinimumApi": "1.1",
+  "packages": [
+    {"name":"libvulkan-dev","version":"1.4.341.0-1","sha256":"41d22a62e3cd03f59b54e159cd15091cf8a7535d91332b8815e114102d2db988"},
+    {"name":"libsdl3-dev","version":"3.4.2+ds-1ubuntu1","sha256":"95dc447d52875b4b9c8cc97f48b91e237306f33966619d77879543febca1a0be"},
+    {"name":"libsdl3-0","version":"3.4.2+ds-1ubuntu1","sha256":"9cffe342d34a7787e25ddb28d6244158a4b44f977a2ab29bc6f4526a29e11825"},
+    {"name":"glslang-tools","version":"16.2.0-2","sha256":"2ad3ea819da071f1eff681415d35bc0af03e076ed5ff3993bffb558095adbb4d"},
+    {"name":"spirv-tools","version":"2026.1-1","sha256":"24e972ed4f2e92ada6f64b32ff40550fda02038385656736af871ca3dcb2b867"}
+  ]
+}
