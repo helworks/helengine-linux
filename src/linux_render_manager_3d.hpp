@@ -12,6 +12,7 @@
 
 class ShaderProgramAsset;
 class ShaderRuntimeMaterial;
+class RuntimeTexture;
 
 namespace helengine::linux {
 class VulkanRenderer2D;
@@ -60,6 +61,8 @@ private:
     static void AppendShaderMatrix(std::vector<uint8_t>& output,::float4x4 matrix);
     /// <summary>Builds one immutable reflected uniform payload from generated transforms or authored material property bytes.</summary>
     std::vector<uint8_t> BuildUniform(::ShaderRuntimeMaterial* material,const LinuxMaterialResource::Binding& binding,::float4x4 world);
+    /// <summary>Snapshots hierarchy-enabled authored lights visible to the active camera into the existing fixed 288-byte forward-light shader contract.</summary>
+    void PrepareCameraLights(::ICamera* camera);
     /// <summary>Borrows the native Vulkan renderer.</summary>
     VulkanRenderer2D& Renderer;
     /// <summary>Borrows the generated 2D command bridge.</summary>
@@ -76,6 +79,8 @@ private:
     ::float4x4 CurrentViewProjection;
     /// <summary>Retains the current authored camera position for the fixed GPU shader constants.</summary>
     ::float3 CurrentCameraPosition;
+    /// <summary>Stores fixed GPU32 ambient and four forward light slots for the current camera only.</summary>
+    std::vector<uint8_t> CurrentForwardLights;
     /// <summary>Prevents uploads after explicit renderer shutdown.</summary>
     bool Disposed=false;
     /// <summary>Stores the actual latest offscreen framebuffer bytes for isolated verification.</summary>

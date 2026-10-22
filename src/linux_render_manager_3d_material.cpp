@@ -101,7 +101,14 @@ std::vector<uint8_t> LinuxRenderManager3D::BuildUniform(::ShaderRuntimeMaterial*
         const float tail[] {CurrentCameraPosition.X.ToSingle(),CurrentCameraPosition.Y.ToSingle(),CurrentCameraPosition.Z.ToSingle(),0,material->get_ReceivesShadows()?1.0f:0.0f,material->get_SupportsEmissive()?1.0f:0.0f,0,0};
         const auto* source=reinterpret_cast<const uint8_t*>(tail); bytes.insert(bytes.end(),source,source+sizeof(tail)); return bytes;
     }
-    if (binding.Name=="ForwardLightBuffer" || binding.Name=="ShadowBuffer") { throw std::runtime_error("Linux authored lighting/shadow constants require their actual generated light/resource implementation: "+binding.Name); }
+    if (binding.Name=="ForwardLightBuffer") {
+        if (binding.Layout.MinimumBytes!=288 || CurrentForwardLights.size()!=288) { throw std::runtime_error("Linux forward lights require the existing 288-byte authored GPU contract."); }
+        return CurrentForwardLights;
+    }
+    if (binding.Name=="ShadowBuffer") {
+        if (binding.Layout.MinimumBytes!=400) { throw std::runtime_error("Linux shadow metadata requires the existing 400-byte authored GPU contract."); }
+        return std::vector<uint8_t>(400,0);
+    }
     Array<uint8_t>* data=nullptr;
     if (!material->TryResolveConstantBufferData__out1(binding.Name,data) || !data) { throw std::runtime_error("Linux material has no required inherited constant buffer: "+binding.Name); }
     std::unique_ptr<Array<uint8_t>> owned(data);

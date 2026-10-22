@@ -118,6 +118,7 @@ void LinuxRenderManager3D::Draw() {
             ::float4x4 view,projection; ::float4x4::CreateLookAt__ref0_ref1_ref2_out3(position,target,up,view);
             ::float4x4::CreatePerspectiveFieldOfView__out4(camera->get_FieldOfView(),w/h,camera->get_NearPlaneDistance(),camera->get_FarPlaneDistance(),projection);
             ::float4x4::Multiply__ref0_ref1_out2(view,projection,CurrentViewProjection); CurrentCameraPosition=position; CurrentCamera=camera;
+            PrepareCameraLights(camera);
             try { queue->VisitOrdered(this); CurrentCamera=nullptr; MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled,{{static_cast<int32_t>(x),static_cast<int32_t>(y)},{static_cast<uint32_t>(w),static_cast<uint32_t>(h)}}); }
             catch (...) { CurrentCamera=nullptr; MeshRenderer.DiscardFrame(); throw; }
             Renderer.BeginFrame(clear,true);
