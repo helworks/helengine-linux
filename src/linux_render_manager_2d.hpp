@@ -29,6 +29,8 @@ public:
     void Dispose() override;
     /// <summary>Builds and consumes one camera's generated command list in retained order during an active native frame.</summary>
     void RenderCamera(::ICamera* camera);
+    /// <summary>Applies the build-selected retained text metadata budget before any generated camera commands are built.</summary>
+    void SetTextCommandReuseMemoryBudgetBytes(int32_t budget);
     /// <summary>Rejects bypassing the generated command builder, whose geometry already incorporates sprite pivots and transforms.</summary>
     void DrawSprite(::ISpriteDrawable2D* sprite) override;
     /// <summary>Rejects bypassing generated text layout and glyph atlas commands.</summary>

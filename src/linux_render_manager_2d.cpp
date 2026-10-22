@@ -13,7 +13,13 @@ namespace helengine::linux {
 LinuxRenderManager2D::LinuxRenderManager2D(VulkanRenderer2D& renderer) : Renderer(renderer), CommandBuilder(std::make_unique<::RenderCommandListBuilder2D>()) { }
 
 LinuxRenderManager2D::~LinuxRenderManager2D() {
+    if (!Disposed) { CommandBuilder->Dispose(); }
     for (const auto& owner : TextureOwners) { delete owner.first; }
+}
+
+void LinuxRenderManager2D::SetTextCommandReuseMemoryBudgetBytes(int32_t budget) {
+    if (budget<0 || Disposed) { throw std::invalid_argument("Linux text command reuse requires a nonnegative budget and a live render bridge."); }
+    CommandBuilder->SetTextCommandReuseMemoryBudgetBytes(budget);
 }
 
 ::RuntimeTexture* LinuxRenderManager2D::BuildTextureFromRaw(::TextureAsset* data) {

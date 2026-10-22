@@ -24,6 +24,14 @@ def main():
         subprocess.run(["dpkg-deb","-x",str(archive),str(prefix)],check=True)
         archive.unlink()
     packages.rmdir()
+    shaderc_alias = prefix / "usr/lib/x86_64-linux-gnu/libshaderc_shared.so"
+    if shaderc_alias.is_symlink():
+        if shaderc_alias.readlink() != pathlib.Path("libshaderc.so.1"):
+            raise RuntimeError("Existing shaderc loader alias does not match the locked Ubuntu library.")
+    elif shaderc_alias.exists():
+        raise RuntimeError("Refusing to replace an existing non-symlink shaderc loader alias.")
+    else:
+        shaderc_alias.symlink_to("libshaderc.so.1")
     print("Verified Linux native tools: " + str(prefix))
 
 
