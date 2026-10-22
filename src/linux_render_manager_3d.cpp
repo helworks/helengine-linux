@@ -40,10 +40,12 @@ LinuxRenderManager3D::~LinuxRenderManager3D() {
     else if (data->Indices16 && data->Indices16->Length>0) { indices.assign(data->Indices16->Data,data->Indices16->Data+data->Indices16->Length); }
     else { indices.resize(vertices.size()); std::iota(indices.begin(),indices.end(),0U); }
     std::unique_ptr<Array<::RuntimeSubmesh*>> submeshes(::ModelSubmeshResolver::BuildRuntimeSubmeshes(data));
+    std::vector<std::unique_ptr<::RuntimeSubmesh>> temporarySubmeshes;
+    for (int32_t index=0;index<submeshes->Length;++index) { temporarySubmeshes.emplace_back((*submeshes)[index]); }
     for (int32_t index=0;index<submeshes->Length;++index) { if ((*submeshes)[index]->get_PrimitiveTopology()!=::ModelPrimitiveTopology::TriangleList) { throw std::runtime_error("Linux indexed model pipeline does not yet support authored line-list topology."); } }
     const size_t handle=MeshRenderer.UploadMesh(vertices,indices);
     GeneratedDisposableOwner<LinuxRuntimeModel> model(new LinuxRuntimeModel(handle));
-    try { model->set_Id(data->get_Id()); model->SetBounds(data->BoundsMin,data->BoundsMax); model->SetSubmeshes(submeshes.get()); Models.emplace(model.get()); }
+    try { model->set_Id(data->get_Id()); model->SetBounds(data->BoundsMin,data->BoundsMax); model->SetSubmeshes(submeshes.get()); for (auto& submesh : temporarySubmeshes) { submesh.release(); } Models.emplace(model.get()); }
     catch (...) { MeshRenderer.ReleaseMesh(handle); throw; }
     return model.release();
 }
