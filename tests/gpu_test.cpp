@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
             throw std::runtime_error("GPU rounded rectangle fill, border or corner coverage failed.");
         }
         if (context.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation reported errors during GPU contracts."); }
-        std::cout << "PASS textured-quads alpha draw-order clipping resize zero-drawable texture-region row-pitch UV resource-release readback\n";
+        std::cout << "PASS textured-quads alpha draw-order clipping resize zero-drawable texture-region row-pitch UV resource-release rounded-fill-border-corners readback\n";
         return 0;
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
 }

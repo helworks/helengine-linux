@@ -112,8 +112,11 @@ public static class LinuxBuildWorkspace {
         string sdl=Path.Combine(prefix,"lib","x86_64-linux-gnu","libSDL3.so.0");
         if (!File.Exists(sdl)) { throw new FileNotFoundException("The locked SDL3 runtime is missing from the native tool prefix.",sdl); }
         Directory.CreateDirectory(Path.Combine(contentRoot,"lib")); File.Copy(sdl,Path.Combine(contentRoot,"lib","libSDL3.so.0"),true);
+        string license=Path.Combine(prefix,"share","doc","libsdl3-0","copyright");
+        if (!File.Exists(license)) { throw new FileNotFoundException("The locked SDL3 package must include its redistribution license.",license); }
+        Directory.CreateDirectory(Path.Combine(contentRoot,"licenses")); File.Copy(license,Path.Combine(contentRoot,"licenses","SDL3.txt"),true);
         File.WriteAllText(Path.Combine(contentRoot,"linux-runtime-dependencies.json"),JsonSerializer.Serialize(new {
-            VulkanMinimumApi="1.2", Bundled=new[] {"lib/libSDL3.so.0","shaders/quad.vert.spv","shaders/quad.frag.spv"},
+            VulkanMinimumApi="1.2", Bundled=new[] {"lib/libSDL3.so.0","licenses/SDL3.txt","shaders/quad.vert.spv","shaders/quad.frag.spv"},
             System=new[] {"libvulkan.so.1","libstdc++.so.6","libgcc_s.so.1","libc.so.6","libm.so.6"}
         },new JsonSerializerOptions {WriteIndented=true}));
     }
