@@ -17,7 +17,7 @@
 
 namespace helengine::linux {
 void LinuxRenderManager3D::PrepareCameraLights(::ICamera* camera) {
-    std::array<float,72> values {}; ::float3 ambient(0.0f,0.0f,0.0f); uint32_t count=0;
+    CurrentLights.clear(); std::array<float,72> values {}; ::float3 ambient(0.0f,0.0f,0.0f); uint32_t count=0;
     const uint32_t budget=static_cast<uint32_t>(std::clamp(get_MaximumVisibleLights(),0,4));
     auto* entities=get_OwnerCore()->get_ObjectManager()->get_Entities();
     for (int32_t entityIndex=0;entities && entityIndex<entities->get_Count();++entityIndex) {
@@ -29,7 +29,7 @@ void LinuxRenderManager3D::PrepareCameraLights(::ICamera* camera) {
             const auto color=light->get_Color(); const float intensity=light->get_Intensity();
             if (light->get_LightType()==::LightType::Ambient) { ambient.X+=color.X*intensity; ambient.Y+=color.Y*intensity; ambient.Z+=color.Z*intensity; continue; }
             if (count>=budget) { continue; }
-            if (get_ShadowsEnabled() && light->get_ShadowsEnabled() && light->get_ShadowStrength()>0) { throw std::runtime_error("Linux active authored light requests shadow rendering, which requires the native shadow-map pass."); }
+            CurrentLights.push_back(light);
             const size_t offset=8+count*16; const auto direction=::LightDirectionUtility::GetLightDirection(light);
             values[offset]=static_cast<float>(color.X*intensity); values[offset+1]=static_cast<float>(color.Y*intensity); values[offset+2]=static_cast<float>(color.Z*intensity); values[offset+3]=static_cast<float>(light->get_LightType());
             values[offset+4]=direction.X.ToSingle(); values[offset+5]=direction.Y.ToSingle(); values[offset+6]=direction.Z.ToSingle(); values[offset+7]=light->get_ShadowStrength();

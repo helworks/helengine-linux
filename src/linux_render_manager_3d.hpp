@@ -13,11 +13,12 @@
 class ShaderProgramAsset;
 class ShaderRuntimeMaterial;
 class RuntimeTexture;
+class LightComponent;
 
 namespace helengine::linux {
 class VulkanRenderer2D;
 class LinuxRenderManager2D;
-/// <summary>Coordinates generated cameras and the implemented Vulkan 2D pass; rejects unsupported 3D resources explicitly until their native pipelines are implemented.</summary>
+/// <summary>Executes generated ordered camera, mesh/material, shadow and 2D command contracts on one native Vulkan device.</summary>
 class LinuxRenderManager3D final : public ::RenderManager3D, public ::IRenderVisitor3D, public ::IShaderRenderManager3D {
 public:
     /// <summary>Borrows the same-device renderer and generated 2D bridge used by each camera.</summary>
@@ -48,6 +49,8 @@ public:
     int32_t get_LastDrawCallCount() override { return LastDrawCalls; }
     /// <summary>Returns the latest actual GPU readback without saving a desktop screenshot or generated image file.</summary>
     const std::vector<uint8_t>& GetLastPixels() const { return LastPixels; }
+    /// <summary>Reports actual Vulkan occlusion samples from generated mesh passes, excluding all UI draws.</summary>
+    uint64_t GetLastVisibleMeshSamples() const { return LastVisibleMeshSamples; }
 private:
     /// <summary>Finds the exact authored program and stage rather than substituting a default shader.</summary>
     static ::ShaderProgramAsset* FindProgram(::ShaderAsset* shader,HeCppString name,::ShaderStage stage);
@@ -63,6 +66,16 @@ private:
     std::vector<uint8_t> BuildUniform(::ShaderRuntimeMaterial* material,const LinuxMaterialResource::Binding& binding,::float4x4 world);
     /// <summary>Snapshots hierarchy-enabled authored lights visible to the active camera into the existing fixed 288-byte forward-light shader contract.</summary>
     void PrepareCameraLights(::ICamera* camera);
+    /// <summary>Ports the existing backend directional/spot/point projection formulas using generated engine math and unchanged shader storage conventions.</summary>
+    ::float4x4 BuildShadowViewProjection(::ICamera* camera,::LightComponent* light,int face) const;
+    /// <summary>Queues actual hierarchy/layer-visible, material-authorized shadow casters for one light projection.</summary>
+    void QueueShadowCasters(::LightComponent* light,::float4x4 viewProjection);
+    /// <summary>Renders the selected lights' atlas tiles or six radial cube faces before publishing the existing 400-byte shadow shader metadata.</summary>
+    void PrepareCameraShadows(::ICamera* camera);
+    /// <summary>Loads aligned backend-internal SPIR-V from the explicit packaged shader directory.</summary>
+    std::vector<uint32_t> LoadBackendShader(const char* name) const;
+    /// <summary>Creates only the exact existing 80/144-byte builtin shadow pipelines on first actual shadow use.</summary>
+    void EnsureShadowPipelines();
     /// <summary>Borrows the native Vulkan renderer.</summary>
     VulkanRenderer2D& Renderer;
     /// <summary>Borrows the generated 2D command bridge.</summary>
@@ -73,6 +86,18 @@ private:
     size_t NeutralShadowAtlas;
     /// <summary>Owns a genuine six-face radial-depth-one cube for disabled point-shadow declarations; active shadows require caster passes.</summary>
     size_t NeutralPointShadow;
+    /// <summary>Owns the actual 2048-square directional/spot shadow atlas, allocated only when used.</summary>
+    size_t ShadowAtlas=SIZE_MAX;
+    /// <summary>Owns up to four actual 512-square six-face point-shadow resources.</summary>
+    std::array<size_t,4> PointShadows {SIZE_MAX,SIZE_MAX,SIZE_MAX,SIZE_MAX};
+    /// <summary>Selects the actual or explicitly disabled atlas descriptor for the active camera.</summary>
+    size_t CurrentShadowAtlas=SIZE_MAX;
+    /// <summary>Selects actual or explicitly disabled cube descriptors for the active camera.</summary>
+    std::array<size_t,4> CurrentPointShadows {SIZE_MAX,SIZE_MAX,SIZE_MAX,SIZE_MAX};
+    /// <summary>Owns the existing projected-depth builtin pipeline with its fixed 80-byte uniform contract.</summary>
+    size_t DepthShadowPipeline=SIZE_MAX;
+    /// <summary>Owns the existing radial-depth builtin pipeline with its fixed 144-byte uniform contract.</summary>
+    size_t PointShadowPipeline=SIZE_MAX;
     /// <summary>Tracks generated model wrappers exclusively owned by this bridge.</summary>
     std::unordered_set<::RuntimeModel*> Models;
     /// <summary>Maps root material wrapper identity to its immutable native shader resource.</summary>
@@ -85,11 +110,17 @@ private:
     ::float3 CurrentCameraPosition;
     /// <summary>Stores fixed GPU32 ambient and four forward light slots for the current camera only.</summary>
     std::vector<uint8_t> CurrentForwardLights;
+    /// <summary>Borrows the selected four nonambient lights in the same order as the current forward shader slots.</summary>
+    std::vector<::LightComponent*> CurrentLights;
+    /// <summary>Owns the current camera's fixed GPU32 atlas/cube metadata and matrix bytes.</summary>
+    std::vector<uint8_t> CurrentShadows;
     /// <summary>Prevents uploads after explicit renderer shutdown.</summary>
     bool Disposed=false;
     /// <summary>Stores the actual latest offscreen framebuffer bytes for isolated verification.</summary>
     std::vector<uint8_t> LastPixels;
     /// <summary>Stores the submitted count from the previous completed frame.</summary>
     int32_t LastDrawCalls = 0;
+    /// <summary>Accumulates the hardware visibility results of all cameras' latest completed color mesh passes.</summary>
+    uint64_t LastVisibleMeshSamples=0;
 };
 }

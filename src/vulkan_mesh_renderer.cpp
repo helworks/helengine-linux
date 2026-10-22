@@ -187,6 +187,10 @@ public:
     std::unordered_map<size_t,std::unique_ptr<ShadowTexture>> Shadows;
     /// <summary>Stores not-yet-submitted draw snapshots in authored order.</summary>
     std::vector<Draw> Draws;
+    /// <summary>Owns separate synchronous hardware occlusion queries for color and shadow passes.</summary>
+    VkQueryPool VisibilityQueries=VK_NULL_HANDLE;
+    /// <summary>Retains actual last-pass visibility results independently of later UI draws or CPU draw counts.</summary>
+    std::array<uint64_t,2> VisibleSamples {};
     /// <summary>Allocates monotonic nonzero mesh identities.</summary>
     size_t NextMesh=1;
     /// <summary>Allocates monotonic nonzero material identities.</summary>
@@ -196,13 +200,18 @@ public:
 
     /// <summary>Initializes compatible render passes with explicit inter-pass color dependencies.</summary>
     explicit State(VulkanContext& context):Context(context) {
-        try { ClearPass=CreatePass(false); LoadPass=CreatePass(true); ShadowPasses[0]=CreateShadowPass(PassKind::DepthShadow,true); ShadowPasses[1]=CreateShadowPass(PassKind::DepthShadow,false); ShadowPasses[2]=CreateShadowPass(PassKind::PointShadow,true); ShadowPasses[3]=CreateShadowPass(PassKind::PointShadow,false); }
-        catch(...) { for(auto pass:ShadowPasses) if(pass) vkDestroyRenderPass(context.GetDevice(),pass,nullptr); if(LoadPass) vkDestroyRenderPass(context.GetDevice(),LoadPass,nullptr); if(ClearPass) vkDestroyRenderPass(context.GetDevice(),ClearPass,nullptr); throw; }
+        try {
+            ClearPass=CreatePass(false); LoadPass=CreatePass(true); ShadowPasses[0]=CreateShadowPass(PassKind::DepthShadow,true); ShadowPasses[1]=CreateShadowPass(PassKind::DepthShadow,false); ShadowPasses[2]=CreateShadowPass(PassKind::PointShadow,true); ShadowPasses[3]=CreateShadowPass(PassKind::PointShadow,false);
+            VkQueryPoolCreateInfo query {VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; query.queryType=VK_QUERY_TYPE_OCCLUSION; query.queryCount=2;
+            VulkanContext::Require(vkCreateQueryPool(context.GetDevice(),&query,nullptr,&VisibilityQueries),"vkCreateQueryPool(mesh visibility)");
+        }
+        catch(...) { if(VisibilityQueries) vkDestroyQueryPool(context.GetDevice(),VisibilityQueries,nullptr); for(auto pass:ShadowPasses) if(pass) vkDestroyRenderPass(context.GetDevice(),pass,nullptr); if(LoadPass) vkDestroyRenderPass(context.GetDevice(),LoadPass,nullptr); if(ClearPass) vkDestroyRenderPass(context.GetDevice(),ClearPass,nullptr); throw; }
     }
     /// <summary>Releases owned resources after all synchronous rendering has finished.</summary>
     ~State() {
         vkDeviceWaitIdle(Context.GetDevice());
         Materials.clear(); Meshes.clear(); Shadows.clear();
+        if(VisibilityQueries) vkDestroyQueryPool(Context.GetDevice(),VisibilityQueries,nullptr);
         for(auto pass:ShadowPasses) if(pass) vkDestroyRenderPass(Context.GetDevice(),pass,nullptr);
         if(LoadPass) vkDestroyRenderPass(Context.GetDevice(),LoadPass,nullptr);
         if(ClearPass) vkDestroyRenderPass(Context.GetDevice(),ClearPass,nullptr);
@@ -440,11 +449,15 @@ void VulkanMeshRenderer::RenderFrame(VkImageView target,uint32_t width,uint32_t 
     const auto sets=state.PrepareBindings(frame);
     const auto commands=state.Context.BeginCommands(); std::array<VkClearValue,2> values{}; std::copy(clear.begin(),clear.end(),values[0].color.float32); values[1].depthStencil={1,0};
     VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO}; begin.renderPass=loadExistingColor ? state.LoadPass : state.ClearPass; begin.framebuffer=frame.Framebuffer; begin.renderArea.extent={width,height}; begin.clearValueCount=values.size(); begin.pClearValues=values.data();
+    vkCmdResetQueryPool(commands,state.VisibilityQueries,0,1);
     vkCmdBeginRenderPass(commands,&begin,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginQuery(commands,state.VisibilityQueries,0,0);
     // Engine-authored camera matrices retain clip-space +Y upward; the 2D pass already consumes physical top-left pixel positions.
     const VkViewport viewport{static_cast<float>(cameraViewport.offset.x),static_cast<float>(cameraViewport.offset.y)+cameraViewport.extent.height,static_cast<float>(cameraViewport.extent.width),-static_cast<float>(cameraViewport.extent.height),0,1}; vkCmdSetViewport(commands,0,1,&viewport); vkCmdSetScissor(commands,0,1,&cameraViewport);
     state.RecordDraws(commands,sets);
+    vkCmdEndQuery(commands,state.VisibilityQueries,0);
     vkCmdEndRenderPass(commands); state.Context.SubmitAndWait(commands); state.Draws.clear();
+    VulkanContext::Require(vkGetQueryPoolResults(device,state.VisibilityQueries,0,1,sizeof(uint64_t),&state.VisibleSamples[0],sizeof(uint64_t),VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WAIT_BIT),"vkGetQueryPoolResults(mesh visibility)");
 }
 
 size_t VulkanMeshRenderer::CreateDepthShadow(uint32_t width,uint32_t height) {
@@ -479,10 +492,13 @@ void VulkanMeshRenderer::RenderShadowPass(size_t texture,uint32_t face,bool clea
     const auto sets=state.PrepareBindings(frame); std::array<VkClearValue,2> values{};
     if(point) { values[0].color.float32[0]=1; values[0].color.float32[3]=1; values[1].depthStencil={1,0}; } else values[0].depthStencil={1,0};
     const auto commands=state.Context.BeginCommands(); VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO}; begin.renderPass=pass; begin.framebuffer=frame.Framebuffer; begin.renderArea.extent={target.Width,target.Height}; begin.clearValueCount=point ? 2 : 1; begin.pClearValues=values.data();
+    vkCmdResetQueryPool(commands,state.VisibilityQueries,1,1);
     vkCmdBeginRenderPass(commands,&begin,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginQuery(commands,state.VisibilityQueries,1,0);
     // Existing shadow shaders map +clip Y to the top of both atlas UVs and cube faces. Vulkan 1.1 negative-height viewports preserve that contract without rewriting matrices or shaders.
     const VkViewport nativeViewport{static_cast<float>(viewport.offset.x),static_cast<float>(viewport.offset.y)+viewport.extent.height,static_cast<float>(viewport.extent.width),-static_cast<float>(viewport.extent.height),0,1}; vkCmdSetViewport(commands,0,1,&nativeViewport); vkCmdSetScissor(commands,0,1,&viewport);
-    state.RecordDraws(commands,sets); vkCmdEndRenderPass(commands); state.Context.SubmitAndWait(commands); state.Draws.clear();
+    state.RecordDraws(commands,sets); vkCmdEndQuery(commands,state.VisibilityQueries,1); vkCmdEndRenderPass(commands); state.Context.SubmitAndWait(commands); state.Draws.clear();
+    VulkanContext::Require(vkGetQueryPoolResults(device,state.VisibilityQueries,1,1,sizeof(uint64_t),&state.VisibleSamples[1],sizeof(uint64_t),VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WAIT_BIT),"vkGetQueryPoolResults(shadow visibility)");
 }
 void VulkanMeshRenderer::ReleaseShadowTexture(size_t texture) {
     const auto found=Resources->Shadows.find(texture); if(found==Resources->Shadows.end()) throw std::invalid_argument("Vulkan shadow release requires a live owned texture");
@@ -503,5 +519,7 @@ bool VulkanMeshRenderer::ReferencesImage(VkImageView image) const {
     return image && std::any_of(Resources->Draws.begin(),Resources->Draws.end(),[image](const auto& draw){return std::any_of(draw.Images.begin(),draw.Images.end(),[image](const auto& binding){return binding.Image.imageView==image;});});
 }
 bool VulkanMeshRenderer::HasPendingDraws() const { return !Resources->Draws.empty(); }
+uint64_t VulkanMeshRenderer::GetLastVisibleSamples() const { return Resources->VisibleSamples[0]; }
+uint64_t VulkanMeshRenderer::GetLastShadowSamples() const { return Resources->VisibleSamples[1]; }
 void VulkanMeshRenderer::DiscardFrame() { Resources->Draws.clear(); }
 }

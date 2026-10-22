@@ -18,6 +18,8 @@ public:
     bool Offscreen = false;
     /// <summary>Requests counted Vulkan validation explicitly.</summary>
     bool Validation = false;
+    /// <summary>Requires an actual software tracing sample pass and central GPU image variation instead of accepting a visible HUD as scene validation.</summary>
+    bool RequireTracerProgress=false;
     /// <summary>Limits execution for reproducible smoke tests; zero means run until the SDL quit event.</summary>
     uint32_t Frames = 0;
 };

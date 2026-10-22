@@ -22,5 +22,7 @@ private:
     static ::StandardPlatformInputConfiguration* CreateStandardInput(std::vector<std::unique_ptr<::StandardPlatformActionBinding>>& bindingOwners);
     /// <summary>Reads optional generated menu diagnostics during explicit input replay, without invoking menu actions or modifying generated state.</summary>
     static std::string SnapshotMenuState(::Core* core);
+    /// <summary>Rejects failed software tracing sessions and optionally requires a complete real 320x240 sample pass plus central GPU output variation.</summary>
+    static void ValidateSoftwareTracer(::Core* core,bool requireProgress,const std::vector<uint8_t>& pixels,uint32_t width,uint32_t height);
 };
 }

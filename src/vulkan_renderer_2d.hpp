@@ -48,6 +48,8 @@ public:
     VkImageView GetOutputImageView() const { return Target->GetView(); }
     /// <summary>Borrows the device context so sibling native passes share the exact same GPU and synchronization owner.</summary>
     VulkanContext& GetContext() const { return Context; }
+    /// <summary>Returns the explicit packaged shader directory shared by backend-internal Vulkan passes.</summary>
+    const std::string& GetShaderRoot() const { return ShaderRoot; }
     /// <summary>Borrows a live texture's sampled image/sampler binding while this renderer retains ownership and synchronization.</summary>
     VkDescriptorImageInfo GetTextureDescriptor(size_t texture) const;
     /// <summary>Returns the valid target pixel width.</summary>

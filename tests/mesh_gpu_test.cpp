@@ -63,6 +63,7 @@ int main(int argc,char** argv) {
         const std::array<float,4> green={0,1,0,1}; std::memcpy(buffers[1].Bytes.data(),green.data(),16);
         renderer.QueueDraw(farMesh,material,buffers,images);
         renderer.RenderFrame(output.GetOutputImageView(),64,64,{0,0,0,1});
+        if (!renderer.GetLastVisibleSamples()) throw std::runtime_error("Indexed GPU geometry produced no hardware occlusion samples");
         output.BeginFrame({0,0,0,1},true); auto pixels=output.EndFrameAndReadback();
         const size_t center=(32*64+32)*4;
         if (pixels[center]!=16 || pixels[center+1]!=128 || pixels[center+2]!=56 || pixels[center+3]!=255) throw std::runtime_error("Authored HLSL sampling/uniform snapshot/indexed depth GPU contract failed");
@@ -91,6 +92,7 @@ int main(int argc,char** argv) {
             const auto culled=renderer.UploadMaterial(vertex,"VSMain",fragment,"PSMain",layout,VulkanMeshRenderer::MaterialState{0,cull,true,true});
             renderer.QueueDraw(nearMesh,culled,buffers,images);
             renderer.RenderFrame(output.GetOutputImageView(),64,64,{0,0,0,1});
+            if ((cull==1 && renderer.GetLastVisibleSamples()!=0) || (cull==2 && renderer.GetLastVisibleSamples()==0)) throw std::runtime_error("Hardware samples did not distinguish culled geometry from actual visible meshes");
             output.BeginFrame({0,0,0,1},true); pixels=output.EndFrameAndReadback();
             if((cull==1 && pixels[center]!=0) || (cull==2 && pixels[center]!=32)) throw std::runtime_error("Authored CCW front/back culling did not preserve engine clip-space winding");
             renderer.ReleaseMaterial(culled);

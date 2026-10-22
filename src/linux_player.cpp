@@ -23,6 +23,10 @@
 #include "MenuComponent.hpp"
 #include "MenuItemComponent.hpp"
 #endif
+#if __has_include("SoftwarePathTracerComponent.hpp")
+#include "SoftwarePathTracerComponent.hpp"
+#include "SoftwarePathTraceSessionState.hpp"
+#endif
 #include "LoadedSceneRecord.hpp"
 #include "GeneratedRuntimeModuleRegistration.hpp"
 #include "StandardPlatformInputConfiguration.hpp"
@@ -93,6 +97,28 @@ std::string LinuxPlayer::SnapshotMenuState(::Core* core) {
 #endif
 }
 
+void LinuxPlayer::ValidateSoftwareTracer(::Core* core,bool requireProgress,const std::vector<uint8_t>& pixels,uint32_t width,uint32_t height) {
+    bool found=false;
+#if __has_include("SoftwarePathTracerComponent.hpp")
+    auto* entities=core->get_ObjectManager()->get_Entities();
+    for (int32_t index=0;entities && index<entities->get_Count();++index) {
+        auto* entity=(*entities)[index]; if (!entity || !entity->get_IsHierarchyEnabled()) { continue; } auto* components=entity->get_Components();
+        for (int32_t componentIndex=0;components && componentIndex<components->get_Count();++componentIndex) {
+            auto* tracer=dynamic_cast<::SoftwarePathTracerComponent*>((*components)[componentIndex]); if (!tracer) { continue; } found=true;
+            bool varied=false; const size_t first=(static_cast<size_t>(height/4)*width+width/4)*4;
+            if (pixels.size()!=static_cast<size_t>(width)*height*4) { throw std::runtime_error("Software tracer validation requires an actual complete GPU readback."); }
+            for (uint32_t y=height/4;y<height*3/4 && !varied;++y) { for (uint32_t x=width/4;x<width*3/4;++x) { const size_t pixel=(static_cast<size_t>(y)*width+x)*4; if (pixels[pixel]!=pixels[first] || pixels[pixel+1]!=pixels[first+1] || pixels[pixel+2]!=pixels[first+2]) { varied=true; break; } } }
+            std::cout << "tracer_state=" << static_cast<int>(tracer->get_SessionState()) << " tracer_spp=" << tracer->get_CompletedSpp() << " tracer_rays=" << tracer->get_TotalRays() << " tracer_nonfinite=" << tracer->get_NonFiniteSampleCount() << " tracer_roi_nonuniform=" << varied << '\n';
+            if (tracer->get_SessionState()==::SoftwarePathTraceSessionState::Failed) { throw std::runtime_error("Generated software tracer entered Failed; a drawable HUD is not successful scene rendering."); }
+            if (requireProgress && (tracer->get_SessionState()!=::SoftwarePathTraceSessionState::Tracing || tracer->get_CompletedSpp()<1 || tracer->get_TotalRays()<76800 || tracer->get_NonFiniteSampleCount()!=0 || !varied)) { throw std::runtime_error("Software tracer did not complete a finite 320x240 sample pass with actual central GPU output."); }
+        }
+    }
+#else
+    (void)core; (void)pixels; (void)width; (void)height;
+#endif
+    if (requireProgress && !found) { throw std::runtime_error("Strict software tracing validation found no active generated tracing component."); }
+}
+
 int LinuxPlayer::Run(const LinuxRunOptions& options) {
     std::unique_ptr<LinuxInputReplay> replay;
     if (!options.InputScript.empty()) { std::ifstream script(options.InputScript); replay=std::make_unique<LinuxInputReplay>(script); }
@@ -150,7 +176,8 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
         for (uint8_t byte : render3d.GetLastPixels()) { checksum=(checksum^byte)*1099511628211ULL; }
         bool nonuniform=false; const auto& pixels=render3d.GetLastPixels();
         for (size_t index=4;index+3<pixels.size();index+=4) { if (pixels[index]!=pixels[0] || pixels[index+1]!=pixels[1] || pixels[index+2]!=pixels[2] || pixels[index+3]!=pixels[3]) { nonuniform=true; break; } }
-        std::cout << "core_frames=" << frames << " draw_calls=" << render3d.get_LastDrawCallCount() << " rgba_bytes=" << pixels.size() << " checksum=" << checksum << " nonuniform=" << nonuniform << '\n';
+        std::cout << "core_frames=" << frames << " draw_calls=" << render3d.get_LastDrawCallCount() << " mesh_visible_samples=" << render3d.GetLastVisibleMeshSamples() << " rgba_bytes=" << pixels.size() << " checksum=" << checksum << " nonuniform=" << nonuniform << '\n';
+        ValidateSoftwareTracer(&core,options.RequireTracerProgress,pixels,renderer.GetWidth(),renderer.GetHeight());
         if (options.Offscreen && (!frames || render3d.get_LastDrawCallCount()<=0 || !nonuniform)) { throw std::runtime_error("Generated-core offscreen run did not produce drawable content; this is not a successful menu validation."); }
         coreNeedsShutdown=false; core.Dispose();
         return 0;

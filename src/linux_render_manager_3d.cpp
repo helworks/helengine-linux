@@ -89,8 +89,9 @@ void LinuxRenderManager3D::Visit(::IDrawable3D* drawable) {
             if (binding.Layout.Type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) { buffers.push_back({binding.Layout.Slot,BuildUniform(material,binding,world)}); }
             else {
                 VkDescriptorImageInfo descriptor;
-                if (binding.Name=="shadowAtlasTexture" || binding.Name=="shadowAtlasSampler") { descriptor=MeshRenderer.GetShadowDescriptor(NeutralShadowAtlas); }
-                else if (binding.Name=="pointShadowSampler" || binding.Name=="pointShadowTexture0" || binding.Name=="pointShadowTexture1" || binding.Name=="pointShadowTexture2" || binding.Name=="pointShadowTexture3") { descriptor=MeshRenderer.GetShadowDescriptor(NeutralPointShadow); }
+                if (binding.Name=="shadowAtlasTexture" || binding.Name=="shadowAtlasSampler") { descriptor=MeshRenderer.GetShadowDescriptor(CurrentShadowAtlas); }
+                else if (binding.Name=="pointShadowSampler") { descriptor=MeshRenderer.GetShadowDescriptor(NeutralPointShadow); }
+                else if (binding.Name=="pointShadowTexture0" || binding.Name=="pointShadowTexture1" || binding.Name=="pointShadowTexture2" || binding.Name=="pointShadowTexture3") { descriptor=MeshRenderer.GetShadowDescriptor(CurrentPointShadows[static_cast<size_t>(binding.Name.back()-'0')]); }
                 else if (binding.Layout.Type==VK_DESCRIPTOR_TYPE_SAMPLER) { descriptor=Renderer.GetTextureDescriptor(0); }
                 else { auto* texture=ResolveMaterialTexture(material,binding.Name); if (!texture) { throw std::runtime_error("Linux material has no required inherited sampled texture: "+binding.Name); } descriptor=Bridge.GetTextureDescriptor(texture); }
                 images.push_back({binding.Layout.Slot,descriptor,binding.Layout.ViewType});
@@ -106,7 +107,7 @@ void LinuxRenderManager3D::Draw() {
     auto* registered = get_OwnerCore()->get_ObjectManager()->get_Cameras();
     if (registered) { for (int32_t index=0;index<registered->get_Count();++index) { auto* camera = (*registered)[index]; if (camera && camera->get_Parent() && camera->get_Parent()->get_IsHierarchyEnabled() && IsCameraVisibleInWindow(camera,get_MainWindowHandle())) { cameras.push_back(camera); } } }
     std::stable_sort(cameras.begin(),cameras.end(),[](auto* left,auto* right) { return left->get_CameraDrawOrder() < right->get_CameraDrawOrder(); });
-    LastDrawCalls=0; bool initialized=false;
+    LastDrawCalls=0; LastVisibleMeshSamples=0; bool initialized=false;
     for (auto* camera : cameras) {
         if (camera->get_RenderTarget()) { throw std::runtime_error("Linux native offscreen camera RenderTarget resources are not implemented."); }
         auto settings=camera->get_ClearSettings(); auto color=settings.ClearColor;
@@ -122,9 +123,9 @@ void LinuxRenderManager3D::Draw() {
             ::float4x4 view,projection; ::float4x4::CreateLookAt__ref0_ref1_ref2_out3(position,target,up,view);
             ::float4x4::CreatePerspectiveFieldOfView__out4(camera->get_FieldOfView(),w/h,camera->get_NearPlaneDistance(),camera->get_FarPlaneDistance(),projection);
             ::float4x4::Multiply__ref0_ref1_out2(view,projection,CurrentViewProjection); CurrentCameraPosition=position; CurrentCamera=camera;
-            PrepareCameraLights(camera);
-            try { queue->VisitOrdered(this); CurrentCamera=nullptr; MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled,{{static_cast<int32_t>(x),static_cast<int32_t>(y)},{static_cast<uint32_t>(w),static_cast<uint32_t>(h)}}); }
+            try { PrepareCameraLights(camera); PrepareCameraShadows(camera); queue->VisitOrdered(this); CurrentCamera=nullptr; MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled,{{static_cast<int32_t>(x),static_cast<int32_t>(y)},{static_cast<uint32_t>(w),static_cast<uint32_t>(h)}}); }
             catch (...) { CurrentCamera=nullptr; MeshRenderer.DiscardFrame(); throw; }
+            LastVisibleMeshSamples+=MeshRenderer.GetLastVisibleSamples();
             Renderer.BeginFrame(clear,true);
         } else { MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled); Renderer.BeginFrame(clear,true); }
         Bridge.RenderCamera(camera); LastDrawCalls+=static_cast<int32_t>(Renderer.GetQueuedDrawCount()); LastPixels=Renderer.EndFrameAndReadback(); initialized=true;

@@ -103,9 +103,10 @@ public static class LinuxBuildWorkspace {
     /// <summary>Packages the required UI SPIR-V and SDL3 runtime, declaring the system Vulkan loader and C++ runtime dependencies explicitly.</summary>
     static void CopyNativeRuntime(string nativeRoot,string contentRoot) {
         Directory.CreateDirectory(Path.Combine(contentRoot,"shaders"));
-        foreach (string shader in new[] {"quad.vert.spv","quad.frag.spv"}) {
+        string[] shaders = ["quad.vert.spv","quad.frag.spv","shadow_depth.vert.spv","shadow_depth.frag.spv","point_shadow_depth.vert.spv","point_shadow_depth.frag.spv"];
+        foreach (string shader in shaders) {
             string source=Path.Combine(nativeRoot,"shaders",shader);
-            if (!File.Exists(source)) { throw new FileNotFoundException("Required Linux UI shader was not produced.",source); }
+            if (!File.Exists(source)) { throw new FileNotFoundException("Required Linux backend shader was not produced.",source); }
             File.Copy(source,Path.Combine(contentRoot,"shaders",shader),true);
         }
         string prefix=Environment.GetEnvironmentVariable("HELENGINE_LINUX_NATIVE_PREFIX");
@@ -117,7 +118,7 @@ public static class LinuxBuildWorkspace {
         if (!File.Exists(license)) { throw new FileNotFoundException("The locked SDL3 package must include its redistribution license.",license); }
         Directory.CreateDirectory(Path.Combine(contentRoot,"licenses")); File.Copy(license,Path.Combine(contentRoot,"licenses","SDL3.txt"),true);
         File.WriteAllText(Path.Combine(contentRoot,"linux-runtime-dependencies.json"),JsonSerializer.Serialize(new {
-            VulkanMinimumApi="1.2", Bundled=new[] {"lib/libSDL3.so.0","licenses/SDL3.txt","shaders/quad.vert.spv","shaders/quad.frag.spv"},
+            VulkanMinimumApi="1.2", Bundled=new[] {"lib/libSDL3.so.0","licenses/SDL3.txt"}.Concat(shaders.Select(shader => "shaders/"+shader)).ToArray(),
             System=new[] {"libvulkan.so.1","libstdc++.so.6","libgcc_s.so.1","libc.so.6","libm.so.6"}
         },new JsonSerializerOptions {WriteIndented=true}));
     }

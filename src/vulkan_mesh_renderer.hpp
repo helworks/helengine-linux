@@ -111,6 +111,10 @@ public:
     bool HasPendingDraws() const;
     /// <summary>Cancels unsent CPU draw packets and releases their borrowed resource references.</summary>
     void DiscardFrame();
+    /// <summary>Returns the hardware occlusion result of the latest color mesh pass; zero distinguishes all-culled geometry from a HUD-only frame.</summary>
+    uint64_t GetLastVisibleSamples() const;
+    /// <summary>Returns the hardware occlusion result of the latest atlas or cube caster pass.</summary>
+    uint64_t GetLastShadowSamples() const;
 private:
     /// <summary>Hides the owned mesh, descriptor, render-pass and pipeline state from generated engine headers.</summary>
     class State;

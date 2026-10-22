@@ -9,6 +9,7 @@ LinuxRunOptions::LinuxRunOptions(int argc,char** argv) {
         const std::string argument=argv[index];
         if (argument=="--offscreen") { Offscreen=true; }
         else if (argument=="--validation") { Validation=true; }
+        else if (argument=="--require-tracer-progress") { RequireTracerProgress=true; }
         else if (argument=="--content" || argument=="--scene" || argument=="--frames" || argument=="--input-script") {
             if (++index>=argc) { throw std::invalid_argument("Missing value for Linux player flag: " + argument); }
             const std::string value=argv[index];

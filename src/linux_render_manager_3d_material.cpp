@@ -108,7 +108,8 @@ std::vector<uint8_t> LinuxRenderManager3D::BuildUniform(::ShaderRuntimeMaterial*
     }
     if (binding.Name=="ShadowBuffer") {
         if (binding.Layout.MinimumBytes!=400) { throw std::runtime_error("Linux shadow metadata requires the existing 400-byte authored GPU contract."); }
-        return std::vector<uint8_t>(400,0);
+        if (CurrentShadows.size()!=400) { throw std::runtime_error("Linux shadow metadata must be prepared from this actual camera's caster passes."); }
+        return CurrentShadows;
     }
     Array<uint8_t>* data=nullptr;
     if (!material->TryResolveConstantBufferData__out1(binding.Name,data) || !data) { throw std::runtime_error("Linux material has no required inherited constant buffer: "+binding.Name); }
