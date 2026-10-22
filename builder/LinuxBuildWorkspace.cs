@@ -20,7 +20,7 @@ public static class LinuxBuildWorkspace {
         Directory.CreateDirectory(content);
         List<PlatformBuildItemOutcome> scenes = [];
         List<PlatformBuildItemOutcome> assets = [];
-        int total = request.Manifest.Scenes.Length + request.Manifest.LooseAssets.Length + request.Manifest.PlatformCookWorkItems.Length;
+        int total = request.Manifest.Scenes.Length + request.Manifest.LooseAssets.Length + request.Manifest.CookedArtifacts.Length + request.Manifest.PlatformCookWorkItems.Length;
         int completed = 0;
         foreach (PlatformBuildScene scene in request.Manifest.Scenes) {
             cancellationToken.ThrowIfCancellationRequested(); CopyPayload(content,scene.SourceIdentity,scene.SourceIdentity);
@@ -31,6 +31,11 @@ public static class LinuxBuildWorkspace {
             cancellationToken.ThrowIfCancellationRequested(); CopyPayload(content,asset.SourceIdentity,asset.SourceIdentity);
             assets.Add(new PlatformBuildItemOutcome(asset.AssetId,PlatformBuildItemOutcomeKind.Succeeded));
             progressReporter.Report(new PlatformBuildProgressUpdate("Stage Payloads",asset.AssetId,++completed,total,$"Staged asset '{asset.AssetName}'."));
+        }
+        foreach (PlatformBuildArtifact artifact in request.Manifest.CookedArtifacts) {
+            cancellationToken.ThrowIfCancellationRequested();
+            CopyDeclaredArtifact(content,artifact.RelativePath);
+            progressReporter.Report(new PlatformBuildProgressUpdate("Stage Cooked Artifacts",artifact.LogicalArtifactId,++completed,total,$"Staged declared runtime artifact '{artifact.RelativePath}'."));
         }
         foreach (PlatformCookWorkItem item in request.Manifest.PlatformCookWorkItems) {
             cancellationToken.ThrowIfCancellationRequested();
@@ -77,6 +82,19 @@ public static class LinuxBuildWorkspace {
         if (!relative.StartsWith("cooked/",StringComparison.Ordinal)) { relative = "cooked/" + relative; }
         string destination = Path.GetFullPath(Path.Combine(contentRoot,relative));
         if (!destination.StartsWith(contentRoot + Path.DirectorySeparatorChar,StringComparison.Ordinal)) { throw new InvalidOperationException($"Linux payload destination escapes content root: '{relativeIdentity}'."); }
+        Directory.CreateDirectory(Path.GetDirectoryName(destination));
+        if (!string.Equals(source,destination,StringComparison.Ordinal)) { File.Copy(source,destination,true); }
+    }
+    /// <summary>Copies a graph-declared runtime dependency using its exact relative identity; absent entries fail even if stale output exists.</summary>
+    static void CopyDeclaredArtifact(string contentRoot, string relativePath) {
+        string relative = relativePath.Replace('\\',Path.DirectorySeparatorChar).Replace('/',Path.DirectorySeparatorChar);
+        if (Path.IsPathRooted(relative)) { throw new InvalidOperationException($"Cooked artifact must have a runtime-relative identity: '{relativePath}'."); }
+        string stagingRoot = Path.GetFullPath(Directory.GetCurrentDirectory());
+        string source = Path.GetFullPath(Path.Combine(stagingRoot,relative));
+        string destination = Path.GetFullPath(Path.Combine(contentRoot,relative));
+        if (!source.StartsWith(stagingRoot + Path.DirectorySeparatorChar,StringComparison.Ordinal)
+            || !destination.StartsWith(contentRoot + Path.DirectorySeparatorChar,StringComparison.Ordinal)) { throw new InvalidOperationException($"Cooked artifact escapes its declared package root: '{relativePath}'."); }
+        if (!File.Exists(source)) { throw new FileNotFoundException($"Required declared Linux cooked artifact is unavailable: '{relativePath}'.",source); }
         Directory.CreateDirectory(Path.GetDirectoryName(destination));
         if (!string.Equals(source,destination,StringComparison.Ordinal)) { File.Copy(source,destination,true); }
     }
