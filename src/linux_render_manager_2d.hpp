@@ -6,6 +6,7 @@
 #include "byte4.hpp"
 #include <memory>
 #include <unordered_map>
+#include <vulkan/vulkan.h>
 
 class ICamera;
 namespace helengine::linux {
@@ -31,6 +32,8 @@ public:
     void RenderCamera(::ICamera* camera);
     /// <summary>Applies the build-selected retained text metadata budget before any generated camera commands are built.</summary>
     void SetTextCommandReuseMemoryBudgetBytes(int32_t budget);
+    /// <summary>Borrows a live engine texture's descriptor for the same-device 3D material pass without transferring texture ownership.</summary>
+    VkDescriptorImageInfo GetTextureDescriptor(::RuntimeTexture* texture) const;
     /// <summary>Rejects bypassing the generated command builder, whose geometry already incorporates sprite pivots and transforms.</summary>
     void DrawSprite(::ISpriteDrawable2D* sprite) override;
     /// <summary>Rejects bypassing generated text layout and glyph atlas commands.</summary>

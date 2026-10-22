@@ -38,6 +38,8 @@ size_t LinuxRenderManager2D::ResolveTexture(::RuntimeTexture* texture) const {
     return found->second;
 }
 
+VkDescriptorImageInfo LinuxRenderManager2D::GetTextureDescriptor(::RuntimeTexture* texture) const { return Renderer.GetTextureDescriptor(ResolveTexture(texture)); }
+
 void LinuxRenderManager2D::ReleaseTexture(::RuntimeTexture* texture) {
     if (!texture) { throw std::invalid_argument("Linux texture release requires a runtime texture owner."); }
     const size_t handle = ResolveTexture(texture); CommandBuilder->InvalidateTextCommandReuse(); Renderer.ReleaseTexture(handle); TextureOwners.erase(texture); ::RenderManager2D::ReleaseTexture(texture);

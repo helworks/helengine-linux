@@ -46,6 +46,8 @@ public:
     VkImage GetOutputImage() const { return Target->Get(); }
     /// <summary>Borrows the RGBA8 target view for a same-device native pass; the renderer retains image ownership.</summary>
     VkImageView GetOutputImageView() const { return Target->GetView(); }
+    /// <summary>Borrows the device context so sibling native passes share the exact same GPU and synchronization owner.</summary>
+    VulkanContext& GetContext() const { return Context; }
     /// <summary>Borrows a live texture's sampled image/sampler binding while this renderer retains ownership and synchronization.</summary>
     VkDescriptorImageInfo GetTextureDescriptor(size_t texture) const;
     /// <summary>Returns the valid target pixel width.</summary>
