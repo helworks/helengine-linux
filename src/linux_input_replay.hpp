@@ -15,6 +15,8 @@ public:
     std::span<const SDL_Event> EventsForFrame(uint32_t frame);
     /// <summary>Reports whether every authored event has entered the same SDL input provider used by the host.</summary>
     bool IsComplete() const { return Cursor==Events.size(); }
+    /// <summary>Reports whether this explicit validation script needs one SDL virtual gamepad in addition to keyboard events.</summary>
+    bool HasGamepadEvents() const { return GamepadEvents; }
 private:
     /// <summary>Retains ascending authored frame numbers parallel to the SDL event stream.</summary>
     std::vector<uint32_t> Frames;
@@ -22,5 +24,7 @@ private:
     std::vector<SDL_Event> Events;
     /// <summary>Identifies the first event not yet returned to the host.</summary>
     size_t Cursor=0;
+    /// <summary>Tracks explicitly authored pad-prefixed buttons without creating any input device during parsing.</summary>
+    bool GamepadEvents=false;
 };
 }

@@ -11,9 +11,16 @@ LinuxInputReplay::LinuxInputReplay(std::istream& source) {
         uint64_t frame=0; std::string action,key,extra; std::istringstream fields(line);
         if (!(fields>>frame>>action>>key) || (fields>>extra) || frame>UINT32_MAX || (action!="down" && action!="up")) { throw std::invalid_argument("Invalid SDL input replay line "+std::to_string(lineNumber)+"; expected: frame down|up SDL-scancode-name."); }
         if (!Frames.empty() && frame<Frames.back()) { throw std::invalid_argument("SDL input replay frames must be in ascending order."); }
-        const auto scancode=SDL_GetScancodeFromName(key.c_str());
-        if (scancode==SDL_SCANCODE_UNKNOWN) { throw std::invalid_argument("Unknown SDL input replay physical key at line "+std::to_string(lineNumber)+": "+key); }
-        SDL_Event event {}; event.type=action=="down"?SDL_EVENT_KEY_DOWN:SDL_EVENT_KEY_UP; event.key.scancode=scancode; event.key.down=action=="down";
+        SDL_Event event {};
+        if (key.starts_with("pad:")) {
+            const auto button=SDL_GetGamepadButtonFromString(key.substr(4).c_str());
+            if (button==SDL_GAMEPAD_BUTTON_INVALID) { throw std::invalid_argument("Unknown SDL input replay gamepad button at line "+std::to_string(lineNumber)+": "+key); }
+            event.type=action=="down"?SDL_EVENT_GAMEPAD_BUTTON_DOWN:SDL_EVENT_GAMEPAD_BUTTON_UP; event.gbutton.button=static_cast<Uint8>(button); event.gbutton.down=action=="down"; GamepadEvents=true;
+        } else {
+            const auto scancode=SDL_GetScancodeFromName(key.c_str());
+            if (scancode==SDL_SCANCODE_UNKNOWN) { throw std::invalid_argument("Unknown SDL input replay physical key at line "+std::to_string(lineNumber)+": "+key); }
+            event.type=action=="down"?SDL_EVENT_KEY_DOWN:SDL_EVENT_KEY_UP; event.key.scancode=scancode; event.key.down=action=="down";
+        }
         Frames.push_back(static_cast<uint32_t>(frame)); Events.push_back(event);
     }
     if (!source.eof() || Events.empty()) { throw std::invalid_argument("SDL input replay requires a readable script containing at least one event."); }

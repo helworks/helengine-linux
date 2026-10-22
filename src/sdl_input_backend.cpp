@@ -24,6 +24,11 @@ void SdlInputBackend::OpenGamepad(SDL_JoystickID id) {
     for (auto& slot : Gamepads) { if (!slot) { slot = SDL_OpenGamepad(id); if (!slot) { throw std::runtime_error(std::string("SDL_OpenGamepad: ") + SDL_GetError()); } return; } }
 }
 
+void SdlInputBackend::AttachReplayGamepad(SDL_JoystickID id) {
+    if (!SDL_IsJoystickVirtual(id) || !SDL_IsGamepad(id)) { throw std::invalid_argument("Offscreen replay accepts only an explicit SDL virtual gamepad."); }
+    OpenGamepad(id);
+}
+
 void SdlInputBackend::HandleEvent(const SDL_Event& event) {
     if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) { if (event.key.scancode >= 0 && event.key.scancode < SDL_SCANCODE_COUNT) { Pressed[event.key.scancode] = event.type == SDL_EVENT_KEY_DOWN; } }
     else if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) { Pressed.fill(false); }

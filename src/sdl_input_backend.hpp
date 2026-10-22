@@ -20,6 +20,8 @@ public:
     void set_ReceiveInputInBackground(bool value) override { BackgroundInput = value; }
     /// <summary>Accumulates keyboard, wheel, focus and controller lifecycle events exactly once in the host event loop.</summary>
     void HandleEvent(const SDL_Event& event);
+    /// <summary>Opens only an explicitly supplied SDL virtual controller for isolated replay; offscreen execution never enumerates physical controllers.</summary>
+    void AttachReplayGamepad(SDL_JoystickID id);
     /// <summary>Captures one frame in physical drawable coordinates while preserving portable key and gamepad IDs.</summary>
     ::InputFrameState CaptureFrame() override;
     /// <summary>Maps SDL physical scancodes to engine desktop keys without relying on Win32 virtual-key APIs.</summary>

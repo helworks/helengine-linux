@@ -1,4 +1,6 @@
 #include "sdl_input_backend.hpp"
+#include "sdl_replay_gamepad.hpp"
+#include "InputGamepadButton.hpp"
 #include <iostream>
 #include <stdexcept>
 
@@ -18,6 +20,11 @@ int main() {
         frame=input.CaptureFrame(); if (frame.Pointer.ScrollDelta!=0) { throw std::runtime_error("Portable scroll delta repeated on the next capture."); }
         input.set_ReceiveInputInBackground(false); event.type=SDL_EVENT_KEY_DOWN; input.HandleEvent(event); frame=input.CaptureFrame();
         if (frame.Keyboard.IsKeyDown(::Keys::Down)) { throw std::runtime_error("Offscreen input polled or accepted an unapproved background gesture."); }
-        std::cout << "PASS generated desktop input SDL mapping press release focus scroll policy no-desktop-poll\n"; return 0;
+        helengine::linux::SdlReplayGamepad virtualPad; input.AttachReplayGamepad(virtualPad.GetId()); input.set_ReceiveInputInBackground(true);
+        event={}; event.type=SDL_EVENT_GAMEPAD_BUTTON_DOWN; event.gbutton.button=SDL_GAMEPAD_BUTTON_SOUTH; virtualPad.Apply(event); frame=input.CaptureFrame();
+        if (!(*frame.Gamepads)[0].Connected || !(*frame.Gamepads)[0].IsButtonDown(::InputGamepadButton::South)) { throw std::runtime_error("Explicit SDL virtual button did not enter the real generated CaptureFrame gamepad snapshot."); }
+        event.type=SDL_EVENT_GAMEPAD_BUTTON_UP; virtualPad.Apply(event); frame=input.CaptureFrame();
+        if ((*frame.Gamepads)[0].IsButtonDown(::InputGamepadButton::South)) { throw std::runtime_error("Released SDL virtual gamepad button remained pressed."); }
+        std::cout << "PASS generated desktop input SDL mapping press release focus scroll policy virtual-gamepad no-desktop-poll\n"; return 0;
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
 }

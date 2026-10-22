@@ -3,6 +3,7 @@
 #include "linux_render_manager_2d.hpp"
 #include "linux_render_manager_3d.hpp"
 #include "linux_input_replay.hpp"
+#include "sdl_replay_gamepad.hpp"
 #include "sdl_input_backend.hpp"
 #include "sdl_host.hpp"
 #include "Core.hpp"
@@ -78,6 +79,8 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
     VulkanRenderer2D renderer(graphics,HELENGINE_LINUX_INITIAL_WIDTH,HELENGINE_LINUX_INITIAL_HEIGHT,(std::filesystem::path(options.ContentRoot)/"shaders").string());
     LinuxRenderManager2D render2d(renderer); render2d.SetTextCommandReuseMemoryBudgetBytes(he_get_runtime_render2d_text_command_reuse_memory_budget_bytes());
     LinuxRenderManager3D render3d(renderer,render2d); SdlInputBackend input(options.Offscreen);
+    std::unique_ptr<SdlReplayGamepad> replayGamepad;
+    if (replay && replay->HasGamepadEvents()) { replayGamepad=std::make_unique<SdlReplayGamepad>(); input.AttachReplayGamepad(replayGamepad->GetId()); }
     auto content=std::make_unique<::HostFileSystemContentStreamSource>(options.ContentRoot);
     GeneratedDisposableOwner<::RuntimeSceneCatalog> catalog(CreateSceneCatalog());
     std::vector<std::unique_ptr<::StandardPlatformActionBinding>> bindingOwners;
@@ -104,7 +107,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
                 if (!size.width || !size.height) { SDL_Delay(16); continue; }
                 if (size.width!=renderer.GetWidth() || size.height!=renderer.GetHeight()) { renderer.Resize(size.width,size.height); render3d.OnWindowResize(1,size.width,size.height); }
             }
-            if (replay) { if (options.Offscreen) { input.set_ReceiveInputInBackground(true); } for (const auto& event : replay->EventsForFrame(frames)) { input.HandleEvent(event); std::cout << "replay_frame=" << frames << " scancode=" << event.key.scancode << " down=" << event.key.down << '\n'; } }
+            if (replay) { if (options.Offscreen) { input.set_ReceiveInputInBackground(true); } for (const auto& event : replay->EventsForFrame(frames)) { if (event.type==SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type==SDL_EVENT_GAMEPAD_BUTTON_UP) { replayGamepad->Apply(event); std::cout << "replay_frame=" << frames << " gamepad_button=" << static_cast<int>(event.gbutton.button) << " down=" << event.gbutton.down << '\n'; } else { input.HandleEvent(event); std::cout << "replay_frame=" << frames << " scancode=" << event.key.scancode << " down=" << event.key.down << '\n'; } } }
             const auto now=std::chrono::steady_clock::now();
             const double elapsed=options.Offscreen ? 1.0/60.0 : std::chrono::duration<double>(now-previous).count(); previous=now;
             const auto updateStart=std::chrono::steady_clock::now(); core.Update(elapsed); const auto drawStart=std::chrono::steady_clock::now(); core.Draw();
