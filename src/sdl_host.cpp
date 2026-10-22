@@ -12,11 +12,8 @@ SdlHost::SdlHost(const char* title, int width, int height, bool validation) {
         if (!Window) { throw std::runtime_error(std::string("SDL_CreateWindow(Vulkan): ") + SDL_GetError()); }
         Uint32 count = 0; const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
         if (!extensions || !count) { throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions: ") + SDL_GetError()); }
-        Context = std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation,VK_API_VERSION_1_2);
-        if (!SDL_Vulkan_CreateSurface(Window,Context->GetInstance(),nullptr,&Surface)) { throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface: ") + SDL_GetError()); }
-        VkBool32 supported = VK_FALSE;
-        VulkanContext::Require(vkGetPhysicalDeviceSurfaceSupportKHR(Context->GetPhysicalDevice(),Context->GetQueueFamily(),Surface,&supported),"vkGetPhysicalDeviceSurfaceSupportKHR");
-        if (!supported) { throw std::runtime_error("Selected Vulkan graphics queue does not support this SDL surface."); }
+        Context = std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation,VK_API_VERSION_1_2,Window);
+        Surface = Context->GetSurface();
         VkSemaphoreCreateInfo semaphore {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         VulkanContext::Require(vkCreateSemaphore(Context->GetDevice(),&semaphore,nullptr,&Acquired),"vkCreateSemaphore(acquire)");
         VulkanContext::Require(vkCreateSemaphore(Context->GetDevice(),&semaphore,nullptr,&Ready),"vkCreateSemaphore(present)");
@@ -32,8 +29,8 @@ void SdlHost::Release() noexcept {
         if (Swapchain) { vkDestroySwapchainKHR(device,Swapchain,nullptr); Swapchain = VK_NULL_HANDLE; }
         if (Ready) { vkDestroySemaphore(device,Ready,nullptr); Ready = VK_NULL_HANDLE; }
         if (Acquired) { vkDestroySemaphore(device,Acquired,nullptr); Acquired = VK_NULL_HANDLE; }
-        if (Surface) { SDL_Vulkan_DestroySurface(Context->GetInstance(),Surface,nullptr); Surface = VK_NULL_HANDLE; }
         Context.reset();
+        Surface=VK_NULL_HANDLE;
     }
     if (Window) { SDL_DestroyWindow(Window); Window = nullptr; }
     if (VideoInitialized) { SDL_Quit(); VideoInitialized = false; }
@@ -75,6 +72,8 @@ bool SdlHost::RecreateSwapchain() {
     uint32_t imageCount = capabilities.minImageCount + 1; if (capabilities.maxImageCount) { imageCount = std::min(imageCount,capabilities.maxImageCount); }
     VkSwapchainCreateInfoKHR create {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR}; create.surface = Surface; create.minImageCount = imageCount; create.imageFormat = selected->format; create.imageColorSpace = selected->colorSpace;
     create.imageExtent = Extent; create.imageArrayLayers = 1; create.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT; create.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; create.preTransform = capabilities.currentTransform;
+    const uint32_t families[] {Context->GetQueueFamily(),Context->GetPresentQueueFamily()};
+    if (families[0]!=families[1]) { create.imageSharingMode=VK_SHARING_MODE_CONCURRENT; create.queueFamilyIndexCount=2; create.pQueueFamilyIndices=families; }
     create.compositeAlpha = (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR : (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) ? VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR : VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
     create.presentMode = VK_PRESENT_MODE_FIFO_KHR; create.clipped = VK_TRUE; create.oldSwapchain = Swapchain;
     VulkanContext::Require(vkDeviceWaitIdle(Context->GetDevice()),"vkDeviceWaitIdle(swapchain)");
@@ -104,8 +103,8 @@ bool SdlHost::Present(VulkanRenderer2D& renderer) {
     vkCmdPipelineBarrier(commands,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,0,0,nullptr,0,nullptr,1,&barrier);
     Context->SubmitAndWait(commands,Acquired,Ready);
     VkPresentInfoKHR present {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR}; present.waitSemaphoreCount = 1; present.pWaitSemaphores = &Ready; present.swapchainCount = 1; present.pSwapchains = &Swapchain; present.pImageIndices = &image;
-    const VkResult result = vkQueuePresentKHR(Context->GetQueue(),&present);
-    VulkanContext::Require(vkQueueWaitIdle(Context->GetQueue()),"vkQueueWaitIdle(present semaphore reuse)");
+    const VkResult result = vkQueuePresentKHR(Context->GetPresentQueue(),&present);
+    VulkanContext::Require(vkQueueWaitIdle(Context->GetPresentQueue()),"vkQueueWaitIdle(present semaphore reuse)");
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || acquire == VK_SUBOPTIMAL_KHR) { RecreateSwapchain(); return false; }
     VulkanContext::Require(result,"vkQueuePresentKHR"); return true;
 }

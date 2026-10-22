@@ -33,7 +33,7 @@ private:
     SDL_Window* Window = nullptr;
     /// <summary>Owns the Vulkan instance/device after the window supplies its required instance extensions.</summary>
     std::unique_ptr<VulkanContext> Context;
-    /// <summary>Owns the SDL-created native Vulkan surface.</summary>
+    /// <summary>Borrows the SDL-created surface owned by Context, selected before physical-device initialization.</summary>
     VkSurfaceKHR Surface = VK_NULL_HANDLE;
     /// <summary>Owns the current swapchain.</summary>
     VkSwapchainKHR Swapchain = VK_NULL_HANDLE;

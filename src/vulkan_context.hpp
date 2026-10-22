@@ -5,12 +5,14 @@
 #include <string>
 #include <atomic>
 
+struct SDL_Window;
+
 namespace helengine::linux {
 /// <summary>Owns Vulkan instance, selected graphics device, queue and transient commands; never requests a desktop surface implicitly.</summary>
 class VulkanContext final {
 public:
-    /// <summary>Creates Vulkan 1.1 resources, optionally enabling surface extensions supplied by SDL and explicit validation.</summary>
-    explicit VulkanContext(std::span<const char* const> extensions = {}, bool validation = false, uint32_t minimumApi = VK_API_VERSION_1_1);
+    /// <summary>Creates the requested Vulkan API; an explicit SDL window creates a surface before device selection so presentation capabilities constrain the selected device.</summary>
+    explicit VulkanContext(std::span<const char* const> extensions = {}, bool validation = false, uint32_t minimumApi = VK_API_VERSION_1_1, SDL_Window* surfaceWindow = nullptr);
     /// <summary>Waits for owned GPU work, then releases resources in reverse initialization order.</summary>
     ~VulkanContext();
     /// <summary>Prevents duplicating ownership of native Vulkan handles.</summary>
@@ -25,8 +27,14 @@ public:
     VkDevice GetDevice() const { return Device; }
     /// <summary>Exposes the graphics queue used by this single render thread.</summary>
     VkQueue GetQueue() const { return Queue; }
-    /// <summary>Returns the graphics family that must also support presentation when a surface is attached.</summary>
+    /// <summary>Returns the family used for graphics command allocation and submission.</summary>
     uint32_t GetQueueFamily() const { return QueueFamily; }
+    /// <summary>Returns the surface-compatible presentation queue, which can belong to a different family.</summary>
+    VkQueue GetPresentQueue() const { return PresentQueue; }
+    /// <summary>Returns the presentation family, or the graphics family for offscreen contexts.</summary>
+    uint32_t GetPresentQueueFamily() const { return PresentQueueFamily; }
+    /// <summary>Borrows the surface owned by this context; offscreen contexts expose a null handle.</summary>
+    VkSurfaceKHR GetSurface() const { return Surface; }
     /// <summary>Returns the selected device properties for truthful device diagnostics.</summary>
     const VkPhysicalDeviceProperties& GetProperties() const { return Properties; }
     /// <summary>Returns validation errors captured by the explicit debug messenger; tests reject nonzero counts.</summary>
@@ -52,10 +60,16 @@ private:
     VkDevice Device = VK_NULL_HANDLE;
     /// <summary>Borrows the graphics queue from Device.</summary>
     VkQueue Queue = VK_NULL_HANDLE;
+    /// <summary>Borrows the selected presentation queue from Device.</summary>
+    VkQueue PresentQueue = VK_NULL_HANDLE;
+    /// <summary>Owns the explicitly requested SDL surface and outlives all device presentation resources.</summary>
+    VkSurfaceKHR Surface = VK_NULL_HANDLE;
     /// <summary>Owns command buffer allocation for synchronous transfers and draws.</summary>
     VkCommandPool CommandPool = VK_NULL_HANDLE;
     /// <summary>Stores the selected family index without inventing a fallback index.</summary>
     uint32_t QueueFamily = UINT32_MAX;
+    /// <summary>Stores the selected surface-compatible present family.</summary>
+    uint32_t PresentQueueFamily = UINT32_MAX;
     /// <summary>Stores actual API/device capabilities for logging and feature checks.</summary>
     VkPhysicalDeviceProperties Properties {};
     /// <summary>Owns the explicit validation messenger when diagnostic validation was requested.</summary>

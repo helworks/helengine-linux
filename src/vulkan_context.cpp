@@ -1,4 +1,6 @@
 #include "vulkan_context.hpp"
+#include "vulkan_queue_selection.hpp"
+#include <SDL3/SDL_vulkan.h>
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
@@ -10,7 +12,7 @@ void VulkanContext::Require(VkResult result, const char* operation) {
     if (result != VK_SUCCESS) { throw std::runtime_error(std::string(operation) + " failed: VkResult=" + std::to_string(result)); }
 }
 
-VulkanContext::VulkanContext(std::span<const char* const> extensions, bool validation, uint32_t minimumApi) {
+VulkanContext::VulkanContext(std::span<const char* const> extensions, bool validation, uint32_t minimumApi, SDL_Window* surfaceWindow) {
     try {
         uint32_t loaderVersion = VK_API_VERSION_1_0;
         auto enumerateVersion = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion"));
@@ -42,11 +44,14 @@ VulkanContext::VulkanContext(std::span<const char* const> extensions, bool valid
         create.pNext = validation ? &debug : nullptr;
         create.enabledLayerCount = validation ? 1 : 0;
         create.ppEnabledLayerNames = validation ? &validationLayer : nullptr;
-        Require(vkCreateInstance(&create, nullptr, &Instance), "vkCreateInstance(Vulkan1.1)");
+        Require(vkCreateInstance(&create, nullptr, &Instance), "vkCreateInstance");
         if (validation) {
             const auto createMessenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(Instance,"vkCreateDebugUtilsMessengerEXT"));
             if (!createMessenger) { throw std::runtime_error("Vulkan loader did not expose requested VK_EXT_debug_utils messenger entry point."); }
             Require(createMessenger(Instance,&debug,nullptr,&DebugMessenger),"vkCreateDebugUtilsMessengerEXT");
+        }
+        if (surfaceWindow && !SDL_Vulkan_CreateSurface(surfaceWindow,Instance,nullptr,&Surface)) {
+            throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface: ") + SDL_GetError());
         }
         uint32_t count = 0;
         Require(vkEnumeratePhysicalDevices(Instance, &count, nullptr), "vkEnumeratePhysicalDevices(count)");
@@ -62,27 +67,45 @@ VulkanContext::VulkanContext(std::span<const char* const> extensions, bool valid
             vkGetPhysicalDeviceQueueFamilyProperties(candidate, &familyCount, nullptr);
             std::vector<VkQueueFamilyProperties> families(familyCount);
             vkGetPhysicalDeviceQueueFamilyProperties(candidate, &familyCount, families.data());
-            for (uint32_t index = 0; index < familyCount; ++index) {
-                if (!(families[index].queueFlags & VK_QUEUE_GRAPHICS_BIT) || !families[index].queueCount) { continue; }
-                const int score = properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 3 : properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? 2 : 1;
-                if (score > bestScore) { bestScore = score; PhysicalDevice = candidate; QueueFamily = index; Properties = properties; }
-                break;
+            std::vector<VkBool32> presentation(familyCount,VK_FALSE);
+            if (Surface) {
+                uint32_t extensionCount = 0;
+                Require(vkEnumerateDeviceExtensionProperties(candidate,nullptr,&extensionCount,nullptr),"vkEnumerateDeviceExtensionProperties(count)");
+                std::vector<VkExtensionProperties> deviceExtensions(extensionCount);
+                Require(vkEnumerateDeviceExtensionProperties(candidate,nullptr,&extensionCount,deviceExtensions.data()),"vkEnumerateDeviceExtensionProperties");
+                if (std::none_of(deviceExtensions.begin(),deviceExtensions.end(),[](const auto& extension) { return std::strcmp(extension.extensionName,VK_KHR_SWAPCHAIN_EXTENSION_NAME)==0; })) { continue; }
+                uint32_t formatCount=0,modeCount=0;
+                Require(vkGetPhysicalDeviceSurfaceFormatsKHR(candidate,Surface,&formatCount,nullptr),"vkGetPhysicalDeviceSurfaceFormatsKHR(count)");
+                Require(vkGetPhysicalDeviceSurfacePresentModesKHR(candidate,Surface,&modeCount,nullptr),"vkGetPhysicalDeviceSurfacePresentModesKHR(count)");
+                if (!formatCount || !modeCount) { continue; }
+                for (uint32_t index=0;index<familyCount;++index) {
+                    Require(vkGetPhysicalDeviceSurfaceSupportKHR(candidate,index,Surface,&presentation[index]),"vkGetPhysicalDeviceSurfaceSupportKHR");
+                }
+            }
+            const VulkanQueueSelection queues(families,presentation,Surface!=VK_NULL_HANDLE);
+            if (!queues.IsValid()) { continue; }
+            const int score = properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 3 : properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? 2 : 1;
+            if (score > bestScore) {
+                bestScore = score; PhysicalDevice = candidate; QueueFamily = queues.GraphicsFamily;
+                PresentQueueFamily=queues.PresentFamily; Properties = properties;
             }
         }
         if (PhysicalDevice == VK_NULL_HANDLE) { throw std::runtime_error("No graphics device satisfies required Vulkan API " + std::to_string(VK_VERSION_MAJOR(minimumApi)) + "." + std::to_string(VK_VERSION_MINOR(minimumApi)) + "."); }
         float priority = 1;
-        VkDeviceQueueCreateInfo queue {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-        queue.queueFamilyIndex = QueueFamily;
-        queue.queueCount = 1;
-        queue.pQueuePriorities = &priority;
+        VkDeviceQueueCreateInfo queues[2] {};
+        queues[0].sType=queues[1].sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queues[0].queueFamilyIndex=QueueFamily; queues[1].queueFamilyIndex=PresentQueueFamily;
+        queues[0].queueCount=queues[1].queueCount=1;
+        queues[0].pQueuePriorities=queues[1].pQueuePriorities=&priority;
         VkDeviceCreateInfo device {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-        device.queueCreateInfoCount = 1;
-        device.pQueueCreateInfos = &queue;
+        device.queueCreateInfoCount = QueueFamily==PresentQueueFamily ? 1 : 2;
+        device.pQueueCreateInfos = queues;
         const char* swapchainExtension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-        device.enabledExtensionCount = extensions.empty() ? 0 : 1;
-        device.ppEnabledExtensionNames = extensions.empty() ? nullptr : &swapchainExtension;
+        device.enabledExtensionCount = Surface ? 1 : 0;
+        device.ppEnabledExtensionNames = Surface ? &swapchainExtension : nullptr;
         Require(vkCreateDevice(PhysicalDevice, &device, nullptr, &Device), "vkCreateDevice(graphics)");
         vkGetDeviceQueue(Device, QueueFamily, 0, &Queue);
+        vkGetDeviceQueue(Device, PresentQueueFamily, 0, &PresentQueue);
         VkCommandPoolCreateInfo pool {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         pool.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
         pool.queueFamilyIndex = QueueFamily;
@@ -99,6 +122,7 @@ void VulkanContext::Release() noexcept {
         vkDestroyDevice(Device, nullptr);
         Device = VK_NULL_HANDLE;
     }
+    if (Surface) { SDL_Vulkan_DestroySurface(Instance,Surface,nullptr); Surface=VK_NULL_HANDLE; }
     if (DebugMessenger) {
         const auto destroyMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(Instance,"vkDestroyDebugUtilsMessengerEXT"));
         if (destroyMessenger) { destroyMessenger(Instance,DebugMessenger,nullptr); }
