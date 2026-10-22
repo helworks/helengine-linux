@@ -12,7 +12,7 @@ SdlHost::SdlHost(const char* title, int width, int height, bool validation) {
         if (!Window) { throw std::runtime_error(std::string("SDL_CreateWindow(Vulkan): ") + SDL_GetError()); }
         Uint32 count = 0; const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
         if (!extensions || !count) { throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions: ") + SDL_GetError()); }
-        Context = std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation);
+        Context = std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation,VK_API_VERSION_1_2);
         if (!SDL_Vulkan_CreateSurface(Window,Context->GetInstance(),nullptr,&Surface)) { throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface: ") + SDL_GetError()); }
         VkBool32 supported = VK_FALSE;
         VulkanContext::Require(vkGetPhysicalDeviceSurfaceSupportKHR(Context->GetPhysicalDevice(),Context->GetQueueFamily(),Surface,&supported),"vkGetPhysicalDeviceSurfaceSupportKHR");

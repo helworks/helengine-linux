@@ -10,7 +10,7 @@ namespace helengine::linux {
 class VulkanContext final {
 public:
     /// <summary>Creates Vulkan 1.1 resources, optionally enabling surface extensions supplied by SDL and explicit validation.</summary>
-    explicit VulkanContext(std::span<const char* const> extensions = {}, bool validation = false);
+    explicit VulkanContext(std::span<const char* const> extensions = {}, bool validation = false, uint32_t minimumApi = VK_API_VERSION_1_1);
     /// <summary>Waits for owned GPU work, then releases resources in reverse initialization order.</summary>
     ~VulkanContext();
     /// <summary>Prevents duplicating ownership of native Vulkan handles.</summary>

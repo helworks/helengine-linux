@@ -96,7 +96,7 @@ public static class LinuxPlatformDefinitionFactory {
             [
                 new PlatformGraphicsProfileDefinition(
                     "vulkan",
-                    "Vulkan 1.1",
+                    "Vulkan 1.2",
                     "Current Linux rendering backend",
                     [
                         new PlatformSettingDefinition(

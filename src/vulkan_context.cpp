@@ -10,12 +10,12 @@ void VulkanContext::Require(VkResult result, const char* operation) {
     if (result != VK_SUCCESS) { throw std::runtime_error(std::string(operation) + " failed: VkResult=" + std::to_string(result)); }
 }
 
-VulkanContext::VulkanContext(std::span<const char* const> extensions, bool validation) {
+VulkanContext::VulkanContext(std::span<const char* const> extensions, bool validation, uint32_t minimumApi) {
     try {
         uint32_t loaderVersion = VK_API_VERSION_1_0;
         auto enumerateVersion = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion"));
         if (enumerateVersion) { Require(enumerateVersion(&loaderVersion), "vkEnumerateInstanceVersion"); }
-        if (loaderVersion < VK_API_VERSION_1_1) { throw std::runtime_error("Vulkan loader API 1.1 or newer is required."); }
+        if (minimumApi < VK_API_VERSION_1_1 || loaderVersion < minimumApi) { throw std::runtime_error("Vulkan loader does not satisfy required API " + std::to_string(VK_VERSION_MAJOR(minimumApi)) + "." + std::to_string(VK_VERSION_MINOR(minimumApi)) + "."); }
         const char* validationLayer = "VK_LAYER_KHRONOS_validation";
         if (validation) {
             uint32_t count = 0;
@@ -34,7 +34,7 @@ VulkanContext::VulkanContext(std::span<const char* const> extensions, bool valid
         debug.pfnUserCallback = ReportValidation; debug.pUserData = this;
         VkApplicationInfo application {VK_STRUCTURE_TYPE_APPLICATION_INFO};
         application.pApplicationName = "HelEngine Linux";
-        application.apiVersion = VK_API_VERSION_1_1;
+        application.apiVersion = minimumApi;
         VkInstanceCreateInfo create {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
         create.pApplicationInfo = &application;
         create.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
@@ -57,7 +57,7 @@ VulkanContext::VulkanContext(std::span<const char* const> extensions, bool valid
         for (VkPhysicalDevice candidate : devices) {
             VkPhysicalDeviceProperties properties {};
             vkGetPhysicalDeviceProperties(candidate, &properties);
-            if (properties.apiVersion < VK_API_VERSION_1_1) { continue; }
+            if (properties.apiVersion < minimumApi) { continue; }
             uint32_t familyCount = 0;
             vkGetPhysicalDeviceQueueFamilyProperties(candidate, &familyCount, nullptr);
             std::vector<VkQueueFamilyProperties> families(familyCount);
@@ -69,7 +69,7 @@ VulkanContext::VulkanContext(std::span<const char* const> extensions, bool valid
                 break;
             }
         }
-        if (PhysicalDevice == VK_NULL_HANDLE) { throw std::runtime_error("No Vulkan 1.1 device exposes a graphics queue."); }
+        if (PhysicalDevice == VK_NULL_HANDLE) { throw std::runtime_error("No graphics device satisfies required Vulkan API " + std::to_string(VK_VERSION_MAJOR(minimumApi)) + "." + std::to_string(VK_VERSION_MINOR(minimumApi)) + "."); }
         float priority = 1;
         VkDeviceQueueCreateInfo queue {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
         queue.queueFamilyIndex = QueueFamily;

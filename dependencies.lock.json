@@ -3,6 +3,7 @@
   "repository": "http://archive.ubuntu.com/ubuntu",
   "suite": "resolute",
   "vulkanMinimumApi": "1.1",
+  "enginePlayerMinimumApi": "1.2",
   "packages": [
     {"name":"libvulkan-dev","version":"1.4.341.0-1","sha256":"41d22a62e3cd03f59b54e159cd15091cf8a7535d91332b8815e114102d2db988"},
     {"name":"libsdl3-dev","version":"3.4.2+ds-1ubuntu1","sha256":"95dc447d52875b4b9c8cc97f48b91e237306f33966619d77879543febca1a0be"},
