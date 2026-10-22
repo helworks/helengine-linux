@@ -32,6 +32,16 @@ def main():
         raise RuntimeError("Refusing to replace an existing non-symlink shaderc loader alias.")
     else:
         shaderc_alias.symlink_to("libshaderc.so.1")
+    for dependency in lock["gitDependencies"]:
+        checkout = pathlib.Path.home() / "dev/helworks/tools" / dependency["name"]
+        if not checkout.exists():
+            subprocess.run(["git","clone","--depth","1","--branch",dependency["tag"],dependency["repository"],str(checkout)],check=True)
+        actual_repository = subprocess.check_output(["git","remote","get-url","origin"],cwd=checkout,text=True).strip()
+        actual_commit = subprocess.check_output(["git","rev-parse","HEAD"],cwd=checkout,text=True).strip()
+        changes = subprocess.check_output(["git","status","--porcelain"],cwd=checkout,text=True).strip()
+        if actual_repository != dependency["repository"] or actual_commit != dependency["commit"] or changes:
+            raise RuntimeError("Refusing to replace or build mismatched/dirty pinned tool checkout: " + str(checkout))
+        print("Verified git dependency " + dependency["name"] + " at " + actual_commit)
     print("Verified Linux native tools: " + str(prefix))
 
 

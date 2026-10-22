@@ -3,6 +3,7 @@
 #include "linux_render_manager_2d.hpp"
 #include "linux_render_manager_3d.hpp"
 #include "linux_input_replay.hpp"
+#include "linux_tracy_profiler.hpp"
 #include "sdl_replay_gamepad.hpp"
 #include "sdl_input_backend.hpp"
 #include "sdl_host.hpp"
@@ -113,6 +114,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
     ::CoreInitializationOptions initialization;
     initialization.ContentStreamSource=content.get(); initialization.SceneCatalog=catalog.get(); initialization.StandardPlatformInputConfiguration=standardInput.get();
     initialization.SceneLoadingBudgetMilliseconds=he_get_runtime_scene_loading_budget_milliseconds(); initialization.PlatformSettingsConfiguration=settings.get();
+    initialization.CpuProfileSink=GetLinuxCpuProfileSink();
     ::Core core(&initialization); ::PlatformInfo platform(he_get_runtime_platform_name(),he_get_runtime_platform_version());
     render3d.AddWindow(1,HELENGINE_LINUX_INITIAL_WIDTH,HELENGINE_LINUX_INITIAL_HEIGHT); render3d.set_ShadowsEnabled(he_get_runtime_shadows_enabled());
     bool coreNeedsShutdown=false;
@@ -136,6 +138,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
             const double elapsed=options.Offscreen ? 1.0/60.0 : std::chrono::duration<double>(now-previous).count(); previous=now;
             const auto updateStart=std::chrono::steady_clock::now(); core.Update(elapsed); const auto drawStart=std::chrono::steady_clock::now(); core.Draw();
             const auto drawEnd=std::chrono::steady_clock::now(); core.SetHostFrameTimings(std::chrono::duration<double,std::milli>(drawStart-updateStart).count(),std::chrono::duration<double,std::milli>(drawEnd-drawStart).count());
+            FlushLinuxProfilerFrame(&core);
             auto* loaded=core.get_SceneManager()->get_LoadedScenes();
             if (loaded && loaded->get_Count()>0) { const auto current=loaded->get_Item(loaded->get_Count()-1)->get_SceneId().raw(); if (current!=lastScene) { std::cout << "loaded_scene_frame=" << frames << " scene=" << current << '\n'; lastScene=current; } }
             if (replay) { const auto state=SnapshotMenuState(&core); if (state!=lastMenu) { std::cout << "menu_state_frame=" << frames << ' ' << state << '\n'; lastMenu=state; } }
