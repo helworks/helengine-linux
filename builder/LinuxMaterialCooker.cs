@@ -39,6 +39,7 @@ public static class LinuxMaterialCooker {
         if (request == null) {
             throw new ArgumentNullException(nameof(request));
         }
+        LinuxPlatformDefinitionFactory.Create().CodegenProfiles.Single().NumericCapabilities.RequireSupported(request.NumericPolicy);
 
         string shaderAssetId = ReadRequiredField(request.FieldValues, "shader-asset-id");
         string vertexProgram = ReadRequiredField(request.FieldValues, "vertex-program");
@@ -89,7 +90,7 @@ public static class LinuxMaterialCooker {
         };
 
         return new PlatformMaterialCookResult(
-            global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset),
+            global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset, request.NumericPolicy),
             [new PlatformShaderDependency(shaderAssetId, vertexProgram, pixelProgram, variant)]);
     }
 

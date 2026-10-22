@@ -13,6 +13,13 @@ internal static class Program {
                 throw new InvalidOperationException("Linux/Vulkan metadata was not published.");
             }
             foreach (int bits in new[] {16,32,64}) { builder.Definition.CodegenProfiles.Single().NumericCapabilities.RequireSupported(new helengine.NumericPrecisionPolicy(bits,bits)); }
+            bool unsupportedMaterialPolicyRejected = false;
+            try {
+                builder.CookMaterial(new helengine.baseplatform.Requests.PlatformMaterialCookRequest("material","material.hemat","linux","debug","vulkan","standard-shader",new Dictionary<string,string> {
+                    ["shader-asset-id"]="shader",["vertex-program"]="VS",["pixel-program"]="PS",["variant"]="default"
+                },new helengine.NumericPrecisionPolicy(16,32)));
+            } catch (NotSupportedException) { unsupportedMaterialPolicyRejected = true; }
+            if (!unsupportedMaterialPolicyRejected) { throw new InvalidOperationException("Public Linux material cook accepted an unadvertised numeric policy."); }
             var command = LinuxNativeBuildExecutor.CreateConfigureCommand("/real checkout/ação", "/tmp/helengine/linux", "/generated core/á", "/script code/ü", "/content/字", "Profiler");
             if (command.UseShellExecute || !command.ArgumentList.Contains("-DHELENGINE_CORE_CPP_ROOT=/generated core/á") || !command.ArgumentList.Contains("-DHELENGINE_NATIVE_PROFILE=Profiler")) {
                 throw new InvalidOperationException("CMake paths lost exact Unicode argument boundaries.");
@@ -24,6 +31,7 @@ internal static class Program {
             bool cancellationPreserved = false;
             try { await LinuxNativeBuildExecutor.RunAsync(command,cancelled.Token); } catch (OperationCanceledException) { cancellationPreserved = true; }
             if (!cancellationPreserved) { throw new InvalidOperationException("Cancelled native build started unexpectedly."); }
+            await StagingContractTests.RunAsync();
             Console.WriteLine("PASS Linux metadata policies16/32/64 Unicode-argument-boundaries profile-validation cancellation");
             return 0;
         } catch (Exception exception) { Console.Error.WriteLine(exception); return 1; }

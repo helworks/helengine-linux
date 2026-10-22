@@ -11,6 +11,14 @@ public static class LinuxNativeBuildExecutor {
         ProcessStartInfo command = new("cmake") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (string argument in new[] {"-S",repositoryRoot,"-B",buildRoot,"-G","Ninja","-DHELENGINE_LINUX_BUILD_PLAYER=ON",
             $"-DHELENGINE_CORE_CPP_ROOT={coreRoot}",$"-DHELENGINE_CODE_ROOT={codeRoot}",$"-DHELENGINE_CONTENT_ROOT={contentRoot}",$"-DHELENGINE_NATIVE_PROFILE={profile}"}) { command.ArgumentList.Add(argument); }
+        string nativePrefix = Environment.GetEnvironmentVariable("HELENGINE_LINUX_NATIVE_PREFIX");
+        if (!string.IsNullOrWhiteSpace(nativePrefix)) {
+            nativePrefix = Path.GetFullPath(nativePrefix);
+            command.ArgumentList.Add($"-DCMAKE_PREFIX_PATH={nativePrefix}");
+            command.ArgumentList.Add($"-DVulkan_INCLUDE_DIR={Path.Combine(nativePrefix,"include")}");
+            command.ArgumentList.Add("-DVulkan_LIBRARY=/lib/x86_64-linux-gnu/libvulkan.so.1");
+            command.ArgumentList.Add($"-DHELENGINE_GLSLANG_VALIDATOR={Path.Combine(nativePrefix,"bin","glslangValidator")}");
+        }
         return command;
     }
     /// <summary>Builds only the real player target and rejects missing output after a successful compiler process.</summary>
