@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable><NuGetAudit>false</NuGetAudit>
+    <HelEngineRoot Condition="'$(HelEngineRoot)' == ''">../../helengine</HelEngineRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(HelEngineRoot)/engine/helengine.baseplatform/helengine.baseplatform.csproj" />
+    <ProjectReference Include="$(HelEngineRoot)/engine/helengine.core/helengine.core.csproj" />
+    <ProjectReference Include="$(HelEngineRoot)/engine/helengine.files/helengine.files.csproj" />
+  </ItemGroup>
+</Project>

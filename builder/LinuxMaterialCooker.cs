@@ -1,0 +1,214 @@
+using helengine;
+using helengine.baseplatform.Requests;
+using helengine.baseplatform.Results;
+namespace helengine.linux.builder;
+/// <summary>Preserves the engine standard material binary schema, authored resources and fixed float32 GPU buffer layout for Vulkan.</summary>
+public static class LinuxMaterialCooker {
+    /// <summary>
+    /// Stable material field identifier used for the authored base color.
+    /// </summary>
+    const string BaseColorFieldId = "base-color";
+
+    /// <summary>
+    /// Constant-buffer name used for the authored base color payload.
+    /// </summary>
+    const string BaseColorBufferName = "BaseColorBuffer";
+
+    /// <summary>
+    /// Stable material field identifier used for the authored roughness scalar.
+    /// </summary>
+    const string RoughnessFieldId = "roughness";
+
+    /// <summary>
+    /// Stable material field identifier used for the authored roughness texture asset id.
+    /// </summary>
+    const string RoughnessTextureFieldId = "roughness-texture-id";
+
+    /// <summary>
+    /// Stable material field identifier used for the authored metallic scalar.
+    /// </summary>
+    const string MetallicFieldId = "metallic";
+
+    /// <summary>
+    /// Stable material field identifier used for the authored specular scalar.
+    /// </summary>
+    const string SpecularFieldId = "specular";
+
+    /// <summary>Serializes the required shader dependency, authored material state and standard fixed-layout buffers.</summary>
+    public static PlatformMaterialCookResult Cook(PlatformMaterialCookRequest request) {
+        if (request == null) {
+            throw new ArgumentNullException(nameof(request));
+        }
+
+        string shaderAssetId = ReadRequiredField(request.FieldValues, "shader-asset-id");
+        string vertexProgram = ReadRequiredField(request.FieldValues, "vertex-program");
+        string pixelProgram = ReadRequiredField(request.FieldValues, "pixel-program");
+        string variant = ReadRequiredField(request.FieldValues, "variant");
+        string baseColor = request.FieldValues.TryGetValue(BaseColorFieldId, out string authoredBaseColor) ? authoredBaseColor : "#ffffff";
+        string diffuseTextureAssetId = request.FieldValues.TryGetValue("texture-id", out string authoredTextureAssetId) && !string.IsNullOrWhiteSpace(authoredTextureAssetId)
+            ? authoredTextureAssetId
+            : string.Empty;
+        string roughnessTextureAssetId = request.FieldValues.TryGetValue(RoughnessTextureFieldId, out string authoredRoughnessTextureAssetId) && !string.IsNullOrWhiteSpace(authoredRoughnessTextureAssetId)
+            ? authoredRoughnessTextureAssetId
+            : string.Empty;
+        float roughness = ReadOptionalFloatField(request.FieldValues, RoughnessFieldId, StandardMaterialRoughnessDefaults.DefaultRoughness);
+        float metallic = ReadOptionalFloatField(request.FieldValues, MetallicFieldId, StandardMaterialMetallicDefaults.DefaultMetallic);
+        float specular = ReadOptionalFloatField(request.FieldValues, SpecularFieldId, StandardMaterialSpecularDefaults.DefaultSpecular);
+        bool castsShadows = ReadOptionalBooleanField(request.FieldValues, "casts-shadow", true);
+        bool receivesShadows = ReadOptionalBooleanField(request.FieldValues, "receives-shadow", true);
+
+        ShaderMaterialAsset materialAsset = new ShaderMaterialAsset {
+            Id = request.MaterialAssetId,
+            ShaderAssetId = shaderAssetId,
+            VertexProgram = vertexProgram,
+            PixelProgram = pixelProgram,
+            Variant = variant,
+            DiffuseTextureAssetId = diffuseTextureAssetId,
+            RoughnessTextureAssetId = roughnessTextureAssetId,
+            CastsShadows = castsShadows,
+            ReceivesShadows = receivesShadows,
+            RenderState = new MaterialRenderState(),
+            ConstantBuffers = [
+                new MaterialConstantBufferAsset {
+                    Name = BaseColorBufferName,
+                    Data = CreateFloat4ConstantBufferData(ParseBaseColor(baseColor))
+                },
+                new MaterialConstantBufferAsset {
+                    Name = StandardMaterialRoughnessDefaults.RoughnessBufferName,
+                    Data = StandardMaterialRoughnessDefaults.CreateConstantBufferData(roughness)
+                },
+                new MaterialConstantBufferAsset {
+                    Name = StandardMaterialMetallicDefaults.MetallicBufferName,
+                    Data = StandardMaterialMetallicDefaults.CreateConstantBufferData(metallic)
+                },
+                new MaterialConstantBufferAsset {
+                    Name = StandardMaterialSpecularDefaults.SpecularBufferName,
+                    Data = StandardMaterialSpecularDefaults.CreateConstantBufferData(specular)
+                }
+            ]
+        };
+
+        return new PlatformMaterialCookResult(
+            global::helengine.files.AssetSerializer.SerializeToBytes(materialAsset),
+            [new PlatformShaderDependency(shaderAssetId, vertexProgram, pixelProgram, variant)]);
+    }
+
+    static string ReadRequiredField(IReadOnlyDictionary<string, string> fieldValues, string fieldId) {
+        if (fieldValues == null) {
+            throw new ArgumentNullException(nameof(fieldValues));
+        } else if (string.IsNullOrWhiteSpace(fieldId)) {
+            throw new ArgumentException("Field id must be provided.", nameof(fieldId));
+        }
+
+        string value;
+        if (!fieldValues.TryGetValue(fieldId, out value) || string.IsNullOrWhiteSpace(value)) {
+            throw new InvalidOperationException($"Missing required material field '{fieldId}'.");
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    /// Reads an optional boolean material field from the builder-owned field map.
+    /// </summary>
+    /// <param name="fieldValues">Serialized material field values keyed by field id.</param>
+    /// <param name="fieldId">Field identifier to read.</param>
+    /// <param name="defaultValue">Value returned when the field is missing or blank.</param>
+    /// <returns>Resolved boolean value.</returns>
+    static bool ReadOptionalBooleanField(IReadOnlyDictionary<string, string> fieldValues, string fieldId, bool defaultValue) {
+        if (fieldValues == null) {
+            throw new ArgumentNullException(nameof(fieldValues));
+        } else if (string.IsNullOrWhiteSpace(fieldId)) {
+            throw new ArgumentException("Field id must be provided.", nameof(fieldId));
+        }
+
+        string value;
+        if (!fieldValues.TryGetValue(fieldId, out value) || string.IsNullOrWhiteSpace(value)) {
+            return defaultValue;
+        }
+
+        if (!bool.TryParse(value, out bool parsedValue)) {
+            throw new InvalidOperationException($"Material field '{fieldId}' must be a boolean value.");
+        }
+
+        return parsedValue;
+    }
+
+    /// <summary>
+    /// Reads an optional floating-point material field from the builder-owned field map.
+    /// </summary>
+    /// <param name="fieldValues">Serialized material field values keyed by field id.</param>
+    /// <param name="fieldId">Field identifier to read.</param>
+    /// <param name="defaultValue">Value returned when the field is missing or blank.</param>
+    /// <returns>Resolved floating-point value.</returns>
+    static float ReadOptionalFloatField(IReadOnlyDictionary<string, string> fieldValues, string fieldId, float defaultValue) {
+        if (fieldValues == null) {
+            throw new ArgumentNullException(nameof(fieldValues));
+        } else if (string.IsNullOrWhiteSpace(fieldId)) {
+            throw new ArgumentException("Field id must be provided.", nameof(fieldId));
+        }
+
+        string value;
+        if (!fieldValues.TryGetValue(fieldId, out value) || string.IsNullOrWhiteSpace(value)) {
+            return defaultValue;
+        }
+
+        if (!float.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float parsedValue)) {
+            throw new InvalidOperationException($"Material field '{fieldId}' must be a floating-point value.");
+        }
+
+        return parsedValue;
+    }
+
+    /// <summary>
+    /// Parses one serialized base-color string into a normalized floating-point color.
+    /// </summary>
+    /// <param name="serializedColor">Serialized color string in <c>#RRGGBB</c> or <c>#RRGGBBAA</c> form.</param>
+    /// <returns>Normalized color value.</returns>
+    static float4 ParseBaseColor(string serializedColor) {
+        if (string.IsNullOrWhiteSpace(serializedColor)) {
+            return new float4(1f, 1f, 1f, 1f);
+        }
+
+        string normalized = serializedColor.Trim();
+        if (normalized.StartsWith("#", StringComparison.Ordinal)) {
+            normalized = normalized.Substring(1);
+        }
+
+        if (normalized.Length != 6 && normalized.Length != 8) {
+            throw new InvalidOperationException("Base color must use #RRGGBB or #RRGGBBAA.");
+        }
+
+        try {
+            byte red = Convert.ToByte(normalized.Substring(0, 2), 16);
+            byte green = Convert.ToByte(normalized.Substring(2, 2), 16);
+            byte blue = Convert.ToByte(normalized.Substring(4, 2), 16);
+            byte alpha = normalized.Length == 8
+                ? Convert.ToByte(normalized.Substring(6, 2), 16)
+                : (byte)255;
+
+            return new float4(
+                red / 255f,
+                green / 255f,
+                blue / 255f,
+                alpha / 255f);
+        } catch (FormatException ex) {
+            throw new InvalidOperationException("Base color must use #RRGGBB or #RRGGBBAA.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Packs one floating-point color into a 16-byte constant-buffer payload.
+    /// </summary>
+    /// <param name="value">Normalized color value to encode.</param>
+    /// <returns>Packed constant-buffer bytes.</returns>
+    static byte[] CreateFloat4ConstantBufferData(float4 value) {
+        using MemoryStream stream = new MemoryStream();
+        using EngineBinaryWriter writer = EngineBinaryWriter.Create(stream, EngineBinaryEndianness.LittleEndian);
+        writer.WriteSingle(value.X.ToSingle());
+        writer.WriteSingle(value.Y.ToSingle());
+        writer.WriteSingle(value.Z.ToSingle());
+        writer.WriteSingle(value.W.ToSingle());
+        return stream.ToArray();
+    }
+}

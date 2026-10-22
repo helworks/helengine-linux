@@ -1,0 +1,357 @@
+using helengine.baseplatform.Definitions;
+using helengine.baseplatform.Profiles;
+
+namespace helengine.linux.builder;
+
+/// <summary>
+/// Creates the typed Linux builder metadata consumed by the editor.
+/// </summary>
+public static class LinuxPlatformDefinitionFactory {
+    /// <summary>
+    /// Creates the current Linux Vulkan platform definition.
+    /// </summary>
+    /// <returns>The Linux platform definition.</returns>
+    public static PlatformDefinition Create() {
+        return new PlatformDefinition(
+            "linux",
+            "Linux Vulkan",
+            [
+                new PlatformBuildProfileDefinition(
+                    "debug",
+                    "Debug",
+                    "Debug Linux player build",
+                    "vulkan",
+                    "default",
+                    [
+                        new PlatformSettingDefinition(
+                            "texture-scale-percent",
+                            "Texture Scale Percent",
+                            PlatformSettingKind.Text,
+                            "100",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "shader-variant-pruning",
+                            "Shader Variant Pruning",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
+                            [])
+                    ],
+                    new Dictionary<string, string>(StringComparer.Ordinal) {
+                        ["codegen-generated-function-profiling"] = "false"
+                    }),
+                new PlatformBuildProfileDefinition(
+                    "release",
+                    "Release",
+                    "Release Linux player build",
+                    "vulkan",
+                    "default",
+                    [
+                        new PlatformSettingDefinition(
+                            "texture-scale-percent",
+                            "Texture Scale Percent",
+                            PlatformSettingKind.Text,
+                            "100",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "shader-variant-pruning",
+                            "Shader Variant Pruning",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
+                            [])
+                    ],
+                    new Dictionary<string, string>(StringComparer.Ordinal) {
+                        ["codegen-generated-function-profiling"] = "false"
+                    }),
+                new PlatformBuildProfileDefinition(
+                    "profiler",
+                    "Profiler",
+                    "Optimized Linux player with generated C++ profiling",
+                    "vulkan",
+                    "default",
+                    [
+                        new PlatformSettingDefinition(
+                            "texture-scale-percent",
+                            "Texture Scale Percent",
+                            PlatformSettingKind.Text,
+                            "100",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "shader-variant-pruning",
+                            "Shader Variant Pruning",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
+                            [])
+                    ],
+                    new Dictionary<string, string>(StringComparer.Ordinal) {
+                        ["codegen-generated-function-profiling"] = "true",
+                        ["codegen-generated-function-profiling-maintained-symbol-prefixes"] = "Core,SceneManager,RenderCommandListBuilder2D"
+                    })
+            ],
+            [
+                new PlatformGraphicsProfileDefinition(
+                    "vulkan",
+                    "Vulkan 1.1",
+                    "Current Linux rendering backend",
+                    [
+                        new PlatformSettingDefinition(
+                            "default-width",
+                            "Default Width",
+                            PlatformSettingKind.Text,
+                            "1280",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "default-height",
+                            "Default Height",
+                            PlatformSettingKind.Text,
+                            "720",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "vsync-enabled",
+                            "VSync Enabled",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "fullscreen-enabled",
+                            "Fullscreen Enabled",
+                            PlatformSettingKind.Boolean,
+                            "false",
+                            true,
+                            [])
+                    ])
+            ],
+            [
+                new PlatformAssetRequirementDefinition(
+                    "scene",
+                    "Scene",
+                    true,
+                    ["helen"]),
+                new PlatformAssetRequirementDefinition(
+                    "texture",
+                    "Texture",
+                    true,
+                    ["png", "tga", "jpg"])
+            ],
+            [
+                new PlatformMaterialSchemaDefinition(
+                    "standard-shader",
+                    "Standard Shader",
+                    ["vulkan"],
+                    [
+                        new PlatformMaterialFieldDefinition(
+                            "use-custom-shader",
+                            "Use Custom Shader",
+                            PlatformMaterialFieldKind.Boolean,
+                            "false",
+                            true,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "shader-asset-id",
+                            "Shader Asset",
+                            PlatformMaterialFieldKind.AssetReference,
+                            string.Empty,
+                            true,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "vertex-program",
+                            "Vertex Program",
+                            PlatformMaterialFieldKind.Text,
+                            string.Empty,
+                            true,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "pixel-program",
+                            "Pixel Program",
+                            PlatformMaterialFieldKind.Text,
+                            string.Empty,
+                            true,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "base-color",
+                            "Base Color",
+                            PlatformMaterialFieldKind.Color,
+                            "#ffffff",
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "texture-id",
+                            "Diffuse Texture",
+                            PlatformMaterialFieldKind.AssetReference,
+                            string.Empty,
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "roughness",
+                            "Roughness",
+                            PlatformMaterialFieldKind.Text,
+                            "1.0",
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "roughness-texture-id",
+                            "Roughness Texture",
+                            PlatformMaterialFieldKind.AssetReference,
+                            string.Empty,
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "metallic",
+                            "Metallic",
+                            PlatformMaterialFieldKind.Text,
+                            "0.0",
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "specular",
+                            "Specular",
+                            PlatformMaterialFieldKind.Text,
+                            "0.5",
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "casts-shadow",
+                            "Casts Shadows",
+                            PlatformMaterialFieldKind.Boolean,
+                            "true",
+                            false,
+                            []),
+                        new PlatformMaterialFieldDefinition(
+                            "receives-shadow",
+                            "Receives Shadows",
+                            PlatformMaterialFieldKind.Boolean,
+                            "true",
+                            false,
+                            [])
+                    ])
+            ],
+            [
+                new PlatformComponentSupportRule(
+                    "helengine.meshcomponent",
+                    PlatformComponentSupportKind.Transform,
+                    "Mesh components are normalized during packaging.",
+                    string.Empty),
+                new PlatformComponentSupportRule(
+                    "helengine.cameracomponent",
+                    PlatformComponentSupportKind.Transform,
+                    "Camera components are normalized during packaging.",
+                    string.Empty),
+                new PlatformComponentSupportRule(
+                    "helengine.fpscomponent",
+                    PlatformComponentSupportKind.Transform,
+                    "Font references are rewritten during packaging.",
+                    string.Empty),
+                new PlatformComponentSupportRule(
+                    "helengine.textcomponent",
+                    PlatformComponentSupportKind.Transform,
+                    "Font references are rewritten during packaging.",
+                    string.Empty),
+                new PlatformComponentSupportRule(
+                    "helengine.directionallightcomponent",
+                    PlatformComponentSupportKind.PassThrough,
+                    "Directional light payloads are emitted unchanged for runtime light extraction.",
+                    string.Empty),
+                new PlatformComponentSupportRule(
+                    "helengine.pointlightcomponent",
+                    PlatformComponentSupportKind.PassThrough,
+                    "Point light payloads are emitted unchanged for runtime light extraction.",
+                    string.Empty),
+                new PlatformComponentSupportRule(
+                    "helengine.spotlightcomponent",
+                    PlatformComponentSupportKind.PassThrough,
+                    "Spot light payloads are emitted unchanged for runtime light extraction.",
+                    string.Empty)
+            ],
+            [
+                new PlatformCodegenProfileDefinition(
+                    "default",
+                    "Default",
+                    "Linux C# to C++ codegen profile",
+                    PlatformCodegenLanguage.Cpp,
+                    PlatformSerializationEndianness.LittleEndian,
+                    [
+                        new PlatformSettingDefinition(
+                            "write-conversion-report",
+                            "Write Conversion Report",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "include-project-defined-preprocessor-symbols",
+                            "Include Project Symbols",
+                            PlatformSettingKind.Boolean,
+                            "false",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "load-native-runtime-metadata",
+                            "Load Native Runtime Metadata",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            PlatformCodegenSettingIds.EnabledFeatures,
+                            "Enabled Runtime Features",
+                            PlatformSettingKind.Text,
+                            "host_file_system",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "codegen-generated-function-profiling",
+                            "Generated Function Profiling",
+                            PlatformSettingKind.Boolean,
+                            "false",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "codegen-generated-function-profiling-maintained-symbol-prefixes",
+                            "Generated Function Profiling Symbol Prefixes",
+                            PlatformSettingKind.Text,
+                            "Core,SceneManager,RenderCommandListBuilder2D",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "codegen-use-rtti",
+                            "Use Compiler RTTI",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "codegen-use-exceptions",
+                            "Use C++ Exceptions",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
+                            [])
+                    ], new PlatformNumericCapabilities(helengine.NumericPrecisionPolicy.Default,
+                        [new(16, 16), new(32, 32), new(64, 64)]))
+            ],
+            [
+                new PlatformStorageProfileDefinition(
+                    "loose-files",
+                    "Loose Files",
+                    PlatformStorageProfileKind.LooseFiles,
+                    "linux-loose-files",
+                    allowContainerSegmentation: false)
+            ],
+            [
+                new PlatformMediaProfileDefinition(
+                    "linux-install-tree",
+                    "Linux Install Tree",
+                    PlatformMediaLayoutKind.InstallTree,
+                    allowPhysicalDuplication: false,
+                    preferLocalityOverDeduplication: false)
+            ]);
+    }
+}
