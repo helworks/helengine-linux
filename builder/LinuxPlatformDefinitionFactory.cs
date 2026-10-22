@@ -90,7 +90,7 @@ public static class LinuxPlatformDefinitionFactory {
                     ],
                     new Dictionary<string, string>(StringComparer.Ordinal) {
                         ["codegen-generated-function-profiling"] = "true",
-                        ["codegen-generated-function-profiling-maintained-symbol-prefixes"] = "Core,SceneManager,RenderCommandListBuilder2D"
+                        ["codegen-generated-function-profiling-maintained-symbol-prefixes"] = "helengine.Core.;helengine.SceneManager.;helengine.RenderCommandListBuilder2D."
                     })
             ],
             [
@@ -340,7 +340,7 @@ public static class LinuxPlatformDefinitionFactory {
                             "codegen-generated-function-profiling-maintained-symbol-prefixes",
                             "Generated Function Profiling Symbol Prefixes",
                             PlatformSettingKind.Text,
-                            "Core,SceneManager,RenderCommandListBuilder2D",
+                            "helengine.Core.;helengine.SceneManager.;helengine.RenderCommandListBuilder2D.",
                             true,
                             []),
                         new PlatformSettingDefinition(
