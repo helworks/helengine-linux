@@ -18,6 +18,7 @@ VulkanContext::VulkanContext(std::span<const char* const> extensions, bool valid
         auto enumerateVersion = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion"));
         if (enumerateVersion) { Require(enumerateVersion(&loaderVersion), "vkEnumerateInstanceVersion"); }
         if (minimumApi < VK_API_VERSION_1_1 || loaderVersion < minimumApi) { throw std::runtime_error("Vulkan loader does not satisfy required API " + std::to_string(VK_VERSION_MAJOR(minimumApi)) + "." + std::to_string(VK_VERSION_MINOR(minimumApi)) + "."); }
+        ApiVersion=minimumApi;
         const char* validationLayer = "VK_LAYER_KHRONOS_validation";
         if (validation) {
             uint32_t count = 0;

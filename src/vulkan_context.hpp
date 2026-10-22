@@ -35,6 +35,8 @@ public:
     uint32_t GetPresentQueueFamily() const { return PresentQueueFamily; }
     /// <summary>Borrows the surface owned by this context; offscreen contexts expose a null handle.</summary>
     VkSurfaceKHR GetSurface() const { return Surface; }
+    /// <summary>Returns the instance API explicitly negotiated by this context, independently of a newer physical-device capability.</summary>
+    uint32_t GetApiVersion() const { return ApiVersion; }
     /// <summary>Returns the selected device properties for truthful device diagnostics.</summary>
     const VkPhysicalDeviceProperties& GetProperties() const { return Properties; }
     /// <summary>Returns validation errors captured by the explicit debug messenger; tests reject nonzero counts.</summary>
@@ -70,6 +72,8 @@ private:
     uint32_t QueueFamily = UINT32_MAX;
     /// <summary>Stores the selected surface-compatible present family.</summary>
     uint32_t PresentQueueFamily = UINT32_MAX;
+    /// <summary>Stores the validated requested instance API for shader capability checks.</summary>
+    uint32_t ApiVersion = VK_API_VERSION_1_0;
     /// <summary>Stores actual API/device capabilities for logging and feature checks.</summary>
     VkPhysicalDeviceProperties Properties {};
     /// <summary>Owns the explicit validation messenger when diagnostic validation was requested.</summary>
