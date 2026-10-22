@@ -3,9 +3,10 @@
 #include <stdexcept>
 
 /// <summary>Runs a real offscreen render, then verifies texture sampling, draw order, alpha and clipping through GPU readback.</summary>
-int main() {
+int main(int argc, char** argv) {
     try {
-        helengine::linux::VulkanContext context;
+        const bool validation = argc == 2 && std::string(argv[1]) == "--validation";
+        helengine::linux::VulkanContext context({},validation);
         const auto& device = context.GetProperties();
         std::cout << "device=" << device.deviceName << " type=" << device.deviceType
                   << " api=" << VK_VERSION_MAJOR(device.apiVersion) << "." << VK_VERSION_MINOR(device.apiVersion) << '\n';
@@ -29,7 +30,25 @@ int main() {
         pixels = renderer.EndFrameAndReadback();
         if (pixels.size() != 32 * 16 * 4 || pixels[1] != 255) { throw std::runtime_error("GPU resize/readback rejected."); }
         if (renderer.Resize(0, 0)) { throw std::runtime_error("Zero drawable size must defer target recreation."); }
-        std::cout << "PASS textured-quads alpha draw-order clipping resize zero-drawable readback\n";
+        const uint8_t atlas[] {255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,255,255};
+        const auto atlasTexture = renderer.CreateTexture(2,2,atlas);
+        const uint8_t updatedRegion[] {255,255,0,255, 10,20,30,40};
+        renderer.UpdateTextureRegion(atlasTexture,0,1,1,1,updatedRegion,8);
+        renderer.BeginFrame({0,0,0,1});
+        renderer.DrawRect(atlasTexture,0,0,32,16,{1,1,1,1});
+        pixels = renderer.EndFrameAndReadback();
+        const size_t bottomLeft = (12 * 32 + 4) * 4;
+        const size_t topRight = (4 * 32 + 24) * 4;
+        if (pixels[bottomLeft] != 255 || pixels[bottomLeft+1] != 255 || pixels[bottomLeft+2] != 0 || pixels[topRight] != 0 || pixels[topRight+1] != 255) {
+            throw std::runtime_error("GPU texture upload/update UV association or row-pitch handling failed.");
+        }
+        renderer.ReleaseTexture(atlasTexture);
+        bool releasedTextureRejected = false;
+        renderer.BeginFrame({0,0,0,1});
+        try { renderer.DrawRect(atlasTexture,0,0,1,1,{1,1,1,1}); } catch (const std::out_of_range&) { releasedTextureRejected = true; }
+        if (!releasedTextureRejected) { throw std::runtime_error("Released runtime texture handle was accepted."); }
+        renderer.EndFrameAndReadback();
+        std::cout << "PASS textured-quads alpha draw-order clipping resize zero-drawable texture-region row-pitch UV resource-release readback\n";
         return 0;
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
 }
