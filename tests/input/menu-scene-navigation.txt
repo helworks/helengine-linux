@@ -1,5 +1,6 @@
 # Enters the real baked menu, navigates every preceding scene option, opens the
 # ray-tracing panel and accepts software_path_tracer through ordinary SDL input.
+# Returns through the authored game's existing reject/back action after scene update/draw.
 5 down pad:a
 6 up pad:a
 12 down pad:dpdown
@@ -26,3 +27,5 @@
 46 up pad:a
 55 down pad:a
 56 up pad:a
+75 down pad:b
+76 up pad:b
