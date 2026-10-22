@@ -19,7 +19,7 @@
 #include <stdexcept>
 
 namespace helengine::linux {
-LinuxRenderManager3D::LinuxRenderManager3D(VulkanRenderer2D& renderer,LinuxRenderManager2D& bridge) : Renderer(renderer), Bridge(bridge), MeshRenderer(renderer.GetContext()) { }
+LinuxRenderManager3D::LinuxRenderManager3D(VulkanRenderer2D& renderer,LinuxRenderManager2D& bridge) : Renderer(renderer), Bridge(bridge), MeshRenderer(renderer.GetContext()), NeutralShadowAtlas(MeshRenderer.CreateDepthShadow(1,1)), NeutralPointShadow(MeshRenderer.CreatePointShadow(1)) { }
 
 LinuxRenderManager3D::~LinuxRenderManager3D() {
     MeshRenderer.DiscardFrame();
@@ -89,9 +89,11 @@ void LinuxRenderManager3D::Visit(::IDrawable3D* drawable) {
             if (binding.Layout.Type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) { buffers.push_back({binding.Layout.Slot,BuildUniform(material,binding,world)}); }
             else {
                 VkDescriptorImageInfo descriptor;
-                if (binding.Layout.Type==VK_DESCRIPTOR_TYPE_SAMPLER) { descriptor=Renderer.GetTextureDescriptor(0); }
+                if (binding.Name=="shadowAtlasTexture" || binding.Name=="shadowAtlasSampler") { descriptor=MeshRenderer.GetShadowDescriptor(NeutralShadowAtlas); }
+                else if (binding.Name=="pointShadowSampler" || binding.Name=="pointShadowTexture0" || binding.Name=="pointShadowTexture1" || binding.Name=="pointShadowTexture2" || binding.Name=="pointShadowTexture3") { descriptor=MeshRenderer.GetShadowDescriptor(NeutralPointShadow); }
+                else if (binding.Layout.Type==VK_DESCRIPTOR_TYPE_SAMPLER) { descriptor=Renderer.GetTextureDescriptor(0); }
                 else { auto* texture=ResolveMaterialTexture(material,binding.Name); if (!texture) { throw std::runtime_error("Linux material has no required inherited sampled texture: "+binding.Name); } descriptor=Bridge.GetTextureDescriptor(texture); }
-                images.push_back({binding.Layout.Slot,descriptor});
+                images.push_back({binding.Layout.Slot,descriptor,binding.Layout.ViewType});
             }
         }
         auto* submesh=(*submeshes)[index]; MeshRenderer.QueueDraw(model->Mesh,found->second.Pipeline,buffers,images,submesh->get_IndexStart(),submesh->get_IndexCount()); ++LastDrawCalls;

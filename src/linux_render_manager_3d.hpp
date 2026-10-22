@@ -69,6 +69,10 @@ private:
     LinuxRenderManager2D& Bridge;
     /// <summary>Owns indexed geometry and authored Vulkan pipelines on the same device as the UI target.</summary>
     VulkanMeshRenderer MeshRenderer;
+    /// <summary>Owns a depth-one atlas descriptor for shader declarations when shadow metadata explicitly disables sampling.</summary>
+    size_t NeutralShadowAtlas;
+    /// <summary>Owns a genuine six-face radial-depth-one cube for disabled point-shadow declarations; active shadows require caster passes.</summary>
+    size_t NeutralPointShadow;
     /// <summary>Tracks generated model wrappers exclusively owned by this bridge.</summary>
     std::unordered_set<::RuntimeModel*> Models;
     /// <summary>Maps root material wrapper identity to its immutable native shader resource.</summary>

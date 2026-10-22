@@ -48,14 +48,15 @@ void LinuxRenderManager3D::AddBindings(LinuxMaterialResource& resource,::ShaderP
         switch (binding->Type) {
             case ::ShaderResourceType::ConstantBuffer: type=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; break;
             case ::ShaderResourceType::Texture2D: type=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; break;
+            case ::ShaderResourceType::TextureCube: type=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; break;
             case ::ShaderResourceType::Sampler: type=VK_DESCRIPTOR_TYPE_SAMPLER; break;
             default: throw std::runtime_error("Linux authored material resource type is not implemented: "+binding->Name.raw());
         }
         const auto found=std::find_if(resource.Bindings.begin(),resource.Bindings.end(),[binding](const auto& value) { return value.Layout.Slot==static_cast<uint32_t>(binding->Slot); });
         if (found!=resource.Bindings.end()) {
-            if (found->Name!=binding->Name.raw() || found->Layout.Type!=type || found->Layout.MinimumBytes!=static_cast<size_t>(binding->Size)) { throw std::runtime_error("Authored shader stages disagree about a shared Vulkan descriptor."); }
+            if (found->Name!=binding->Name.raw() || found->Layout.Type!=type || found->Layout.MinimumBytes!=static_cast<size_t>(binding->Size) || found->Layout.ViewType!=(binding->Type==::ShaderResourceType::TextureCube?VK_IMAGE_VIEW_TYPE_CUBE:VK_IMAGE_VIEW_TYPE_2D)) { throw std::runtime_error("Authored shader stages disagree about a shared Vulkan descriptor."); }
             found->Layout.Stages|=stage;
-        } else { resource.Bindings.push_back({binding->Name.raw(),{static_cast<uint32_t>(binding->Slot),type,stage,static_cast<size_t>(binding->Size),1}}); }
+        } else { resource.Bindings.push_back({binding->Name.raw(),{static_cast<uint32_t>(binding->Slot),type,stage,static_cast<size_t>(binding->Size),1,static_cast<uint32_t>(binding->Set),binding->Type==::ShaderResourceType::TextureCube?VK_IMAGE_VIEW_TYPE_CUBE:VK_IMAGE_VIEW_TYPE_2D}}); }
     }
 }
 
