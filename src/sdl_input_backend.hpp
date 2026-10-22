@@ -37,6 +37,12 @@ private:
     int32_t VerticalWheel = 0;
     /// <summary>Accumulates horizontal wheel detents independently of the vertical axis.</summary>
     int32_t HorizontalWheel = 0;
+    /// <summary>Retains the previous physical cursor coordinate for portable pointer delta events.</summary>
+    int32_t PreviousX = 0, PreviousY = 0;
+    /// <summary>Retains the previous accumulated wheel value for one-frame portable scroll deltas.</summary>
+    int32_t PreviousWheel = 0;
+    /// <summary>Suppresses an invented cursor delta on the first capture.</summary>
+    bool HasPreviousPointer = false;
     /// <summary>Stores native controller ownership in stable portable slots.</summary>
     std::array<SDL_Gamepad*,4> Gamepads {};
     /// <summary>Owns captured portable controller values for the duration of the host frame.</summary>

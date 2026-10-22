@@ -13,8 +13,11 @@ int main() {
         if (frame.Keyboard.IsKeyDown(::Keys::Down)) { throw std::runtime_error("Released SDL key remained pressed in generated input."); }
         event.type=SDL_EVENT_KEY_DOWN; input.HandleEvent(event); event.type=SDL_EVENT_WINDOW_FOCUS_LOST; input.HandleEvent(event); frame=input.CaptureFrame();
         if (frame.Keyboard.IsKeyDown(::Keys::Down)) { throw std::runtime_error("Focus loss leaked a pressed keyboard gesture."); }
+        event.type=SDL_EVENT_MOUSE_WHEEL; event.wheel.y=1; input.HandleEvent(event); frame=input.CaptureFrame();
+        if (frame.Mouse.get_ScrollWheelValue()!=120 || frame.Pointer.ScrollDelta!=120) { throw std::runtime_error("SDL wheel did not preserve desktop units and one-frame pointer scroll delta."); }
+        frame=input.CaptureFrame(); if (frame.Pointer.ScrollDelta!=0) { throw std::runtime_error("Portable scroll delta repeated on the next capture."); }
         input.set_ReceiveInputInBackground(false); event.type=SDL_EVENT_KEY_DOWN; input.HandleEvent(event); frame=input.CaptureFrame();
         if (frame.Keyboard.IsKeyDown(::Keys::Down)) { throw std::runtime_error("Offscreen input polled or accepted an unapproved background gesture."); }
-        std::cout << "PASS generated desktop input SDL mapping press release focus policy no-desktop-poll\n"; return 0;
+        std::cout << "PASS generated desktop input SDL mapping press release focus scroll policy no-desktop-poll\n"; return 0;
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
 }
