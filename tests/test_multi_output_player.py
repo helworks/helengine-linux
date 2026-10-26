@@ -2,6 +2,7 @@
 import argparse
 import os
 import re
+import secrets
 import subprocess
 
 
@@ -11,19 +12,25 @@ def main():
     parser.add_argument("--player", required=True)
     parser.add_argument("--content", required=True)
     parser.add_argument("--frames", type=int, default=8)
+    parser.add_argument("--guarded", action="store_true")
     arguments = parser.parse_args()
     environment = dict(os.environ)
     environment.pop("DISPLAY", None)
     environment.pop("WAYLAND_DISPLAY", None)
     command = [arguments.player, "--content", arguments.content, "--offscreen", "--frames", str(arguments.frames), "--validation",
                "--output", "main,640,360,opaque", "--output", "glass,640,360,transparent", "--output", "absent-output,80,60,transparent"]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=120, env=environment)
+    token = secrets.token_hex(16) if arguments.guarded else "-"
+    startup = None
+    if arguments.guarded:
+        command.extend(["--session", token, "--parent-pid", str(os.getpid())])
+        startup = "HELENGINE_START " + token + "\n"
+    result = subprocess.run(command, input=startup, capture_output=True, text=True, timeout=120, env=environment)
     print(result.stdout[-5000:])
     print(result.stderr[-3000:])
     if result.returncode:
         raise RuntimeError("Real generated multi-output player failed: " + str(result.returncode))
     receipts = {}
-    for tag, generation, tick, ready, width, height in re.findall(r"^HELENGINE_OUTPUT 1 - ([A-Za-z0-9-]+) (\d+) (\d+) ([01]) (\d+) (\d+)$", result.stdout, re.M):
+    for tag, generation, tick, ready, width, height in re.findall(r"^HELENGINE_OUTPUT 1 " + re.escape(token) + r" ([A-Za-z0-9-]+) (\d+) (\d+) ([01]) (\d+) (\d+)$", result.stdout, re.M):
         receipts.setdefault(tag, []).append([int(generation), int(tick), int(ready), int(width), int(height)])
     for tag, size in {"main": [640, 360], "glass": [640, 360], "absent-output": [80, 60]}.items():
         rows = receipts.get(tag, [])

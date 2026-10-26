@@ -12,7 +12,7 @@ int main() {
             renderer.AddOutput(2,32,24); renderer.SelectOutput(2);
             if (renderer.GetOutputImage()==mainImage) { throw std::runtime_error("Outputs alias one image."); }
             renderer.BeginFrame({0,0,0,0}); renderer.DrawRect(0,0,0,16,12,{0,1,0,0.5f}); const auto glass=renderer.EndFrameAndReadback();
-            if (glass.size()!=32*24*4 || glass[3]<126 || glass[3]>129 || glass.back()!=0) { throw std::runtime_error("Glass target lost partial/empty alpha."); }
+            if (glass.size()!=32*24*4 || glass[1]<126 || glass[1]>129 || glass[3]<126 || glass[3]>129 || glass.back()!=0) { throw std::runtime_error("Glass target lost partial/empty alpha."); }
             renderer.Resize(40,30); renderer.SelectOutput(1);
             if (renderer.GetWidth()!=64 || renderer.GetHeight()!=48 || renderer.GetOutputImage()!=mainImage) { throw std::runtime_error("Secondary resize changed main target ownership or extent."); }
             helengine::linux::GpuBuffer readback(context,main.size(),VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);

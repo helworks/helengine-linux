@@ -222,7 +222,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
             for (size_t index=0;index<outputs.size();++index) {
                 if (!active[index]) { continue; }
                 renderer.SelectOutput(index+1);
-                const bool completed=options.Offscreen || windows[index]->Present(renderer);
+                const bool completed=options.Offscreen || windows[index]->Present(renderer,scales[index]);
                 if (!completed) { continue; } ++ticks[index];
                 if (!options.Outputs.empty()) {
                     std::cout << "HELENGINE_OUTPUT 1 " << (options.Session.empty()?"-":options.Session) << ' ' << outputs[index].Tag << ' ' << generations[index] << ' ' << ticks[index] << ' ' << (render3d.IsOutputReady(static_cast<intptr_t>(index+1))?1:0) << ' ' << renderer.GetWidth() << ' ' << renderer.GetHeight() << '\n' << std::flush;

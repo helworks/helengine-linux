@@ -14,6 +14,7 @@ class ShaderProgramAsset;
 class ShaderRuntimeMaterial;
 class RuntimeTexture;
 class LightComponent;
+class Entity;
 
 namespace helengine::linux {
 class VulkanRenderer2D;
@@ -49,6 +50,8 @@ public:
     void AddWindow(intptr_t handle,int32_t width,int32_t height) override;
     /// <summary>Specifies whether a registered output preserves transparent clear alpha.</summary>
     void SetOutputTransparent(intptr_t handle,bool transparent);
+    /// <summary>Revokes only the resized output readiness before updating its generated layout dimensions.</summary>
+    void OnWindowResize(intptr_t handle,int32_t width,int32_t height) override;
     /// <summary>Reports complete scene-camera work for the selected output in the most recent draw.</summary>
     bool IsOutputReady(intptr_t handle) const;
     /// <summary>Borrows the completed GPU readback retained independently for a registered output.</summary>
@@ -62,6 +65,8 @@ public:
     /// <summary>Reports actual depth-tested caster samples from all shadow atlas tiles and cube faces in the latest frame.</summary>
     uint64_t GetLastVisibleShadowSamples() const { return LastVisibleShadowSamples; }
 private:
+    /// <summary>Requires a rendered camera to descend from an actual completed scene root rather than an untracked bootstrap/loading entity.</summary>
+    static bool IsCompletedSceneCamera(::ICamera* camera,const std::unordered_set<::Entity*>& completedRoots);
     /// <summary>Stores output handles in stable registration and presentation order.</summary>
     std::vector<intptr_t> Outputs;
     /// <summary>Preserves the requested alpha policy separately from native window focus/input policy.</summary>

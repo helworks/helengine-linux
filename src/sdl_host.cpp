@@ -105,9 +105,13 @@ bool SdlHost::RecreateSwapchain() {
     VulkanContext::Require(vkGetSwapchainImagesKHR(Context->GetDevice(),Swapchain,&count,Images.data()),"vkGetSwapchainImagesKHR"); return true;
 }
 
-bool SdlHost::Present(VulkanRenderer2D& renderer) {
+bool SdlHost::Present(VulkanRenderer2D& renderer) { return Present(renderer,GetDisplayScale()); }
+
+bool SdlHost::Present(VulkanRenderer2D& renderer,float renderedScale) {
     auto drawable = GetDrawableSize(); if (!drawable.width || !drawable.height) { SDL_Delay(16); return false; }
+    if (drawable.width!=renderer.GetWidth() || drawable.height!=renderer.GetHeight() || renderedScale!=GetDisplayScale()) { return false; }
     if (!Swapchain || drawable.width != Extent.width || drawable.height != Extent.height) { if (!RecreateSwapchain()) { return false; } }
+    if (Extent.width!=renderer.GetWidth() || Extent.height!=renderer.GetHeight()) { return false; }
     uint32_t image = 0;
     const VkResult acquire = vkAcquireNextImageKHR(Context->GetDevice(),Swapchain,UINT64_MAX,Acquired,VK_NULL_HANDLE,&image);
     if (acquire == VK_ERROR_OUT_OF_DATE_KHR) { RecreateSwapchain(); return false; }
@@ -126,6 +130,8 @@ bool SdlHost::Present(VulkanRenderer2D& renderer) {
     const VkResult result = vkQueuePresentKHR(Context->GetPresentQueue(),&present);
     VulkanContext::Require(vkQueueWaitIdle(Context->GetPresentQueue()),"vkQueueWaitIdle(present semaphore reuse)");
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || acquire == VK_SUBOPTIMAL_KHR) { RecreateSwapchain(); return false; }
-    VulkanContext::Require(result,"vkQueuePresentKHR"); return true;
+    VulkanContext::Require(result,"vkQueuePresentKHR");
+    const auto completed=GetDrawableSize();
+    return completed.width==renderer.GetWidth() && completed.height==renderer.GetHeight() && renderedScale==GetDisplayScale();
 }
 }

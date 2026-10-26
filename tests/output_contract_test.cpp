@@ -26,6 +26,10 @@ int main() {
         if (options.Outputs.size()!=2 || options.Outputs[0].Tag!="main" || options.Outputs[1].Width!=320 || !options.Outputs[1].Transparent || !options.Noninteractive || options.ParentPid!=123) { throw std::runtime_error("Valid multi-output options were not preserved."); }
         for (const auto& spec : {"main,0,1,opaque","main,1,16385,opaque","main,1,1,invalid","a_b,1,1,opaque",",1,1,opaque","main,1,1,opaque,extra","main,-1,1,opaque", "main,1,1,transparent\n"}) { Reject({"player","--content",root,"--output",spec}); }
         Reject({"player","--content",root,"--output","main,1,1,opaque","--output","main,2,2,transparent"});
+        Reject({"player","--content",root,"--output","other,64,48,opaque"});
+        Reject({"player","--content",root,"--output","main,64,48,opaque","--output","glass,64,48,transparent","--output","GLASS,64,48,transparent"});
+        const auto caseMain=Parse({"player","--content",root,"--output","MAIN,64,48,opaque"});
+        if (caseMain.Outputs[0].Tag!="MAIN") { throw std::runtime_error("Core-compatible tag spelling was not preserved."); }
         Reject({"player","--content",root,"--session","0123456789abcdef0123456789abcdef"});
         Reject({"player","--content",root,"--parent-pid","123"});
         Reject({"player","--content",root,"--session","0123456789ABCDEF0123456789abcdef","--parent-pid","123"});

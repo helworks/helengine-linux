@@ -27,6 +27,8 @@ public:
     void SetWindowSize(int width, int height);
     /// <summary>Blits a completed same-device RGBA target to the swapchain, recovering out-of-date/suboptimal surfaces explicitly.</summary>
     bool Present(VulkanRenderer2D& renderer);
+    /// <summary>Rejects presentation progress when target dimensions or the scale captured before rendering no longer match the drawable.</summary>
+    bool Present(VulkanRenderer2D& renderer,float renderedScale);
 private:
     /// <summary>Recreates the swapchain when drawable extent is nonzero and validates presentation capabilities.</summary>
     bool RecreateSwapchain();

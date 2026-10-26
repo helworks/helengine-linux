@@ -34,5 +34,8 @@ public:
     bool RequireShadowReception=false;
     /// <summary>Limits execution for reproducible smoke tests; zero means run until the SDL quit event.</summary>
     uint32_t Frames = 0;
+private:
+    /// <summary>Compares validated ASCII output tags using the existing Core case-insensitive identity contract.</summary>
+    static bool TagsEqual(const std::string& left,const std::string& right);
 };
 }

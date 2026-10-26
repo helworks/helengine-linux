@@ -22,6 +22,7 @@ int main() {
             }
             const auto size=glass.GetDrawableSize();
             if (size.width!=200 || size.height!=150 || main.GetDrawableSize().width!=320) { throw std::runtime_error("Secondary resize changed another output or failed."); }
+            if (glass.Present(renderer)) { throw std::runtime_error("Resize between draw and present accepted a stale target as completed output."); }
             renderer.Resize(size.width,size.height); renderer.BeginFrame({0,0,0,0}); renderer.EndFrameAndReadback(); glass.Present(renderer);
         }
         renderer.SelectOutput(1); renderer.BeginFrame({0,0,1,1}); renderer.EndFrameAndReadback();

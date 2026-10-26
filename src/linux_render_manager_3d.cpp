@@ -11,6 +11,7 @@
 #include <numeric>
 #include "Core.hpp"
 #include "SceneManager.hpp"
+#include "LoadedSceneRecord.hpp"
 #include "ObjectManager.hpp"
 #include "ICamera.hpp"
 #include "Entity.hpp"
@@ -110,11 +111,28 @@ void LinuxRenderManager3D::AddWindow(intptr_t handle,int32_t width,int32_t heigh
 }
 
 void LinuxRenderManager3D::SetOutputTransparent(intptr_t handle,bool transparent) { TransparentOutputs.at(handle)=transparent; }
+void LinuxRenderManager3D::OnWindowResize(intptr_t handle,int32_t width,int32_t height) {
+    OutputReadiness.at(handle)=false;
+    ::RenderManager3D::OnWindowResize(handle,width,height);
+}
 bool LinuxRenderManager3D::IsOutputReady(intptr_t handle) const { return OutputReadiness.at(handle); }
 const std::vector<uint8_t>& LinuxRenderManager3D::GetOutputPixels(intptr_t handle) const { return OutputPixels.at(handle); }
 
+bool LinuxRenderManager3D::IsCompletedSceneCamera(::ICamera* camera,const std::unordered_set<::Entity*>& completedRoots) {
+    for (auto* entity=camera->get_Parent();entity;entity=entity->get_Parent()) { if (completedRoots.contains(entity)) { return true; } }
+    return false;
+}
+
 void LinuxRenderManager3D::Draw() {
     if (Disposed || !get_OwnerCore() || !get_OwnerCore()->get_ObjectManager()) { throw std::logic_error("Linux camera dispatch requires initialized generated Core/ObjectManager and a live renderer."); }
+    auto* scenes=get_OwnerCore()->get_SceneManager(); auto* loaded=scenes->get_LoadedScenes();
+    std::unordered_set<::Entity*> completedRoots;
+    if (loaded && !scenes->get_IsSceneTransitionActive() && !scenes->get_HasPendingSceneOperations()) {
+        for (int32_t index=0;index<loaded->get_Count();++index) {
+            auto* roots=loaded->get_Item(index)->get_RootEntities();
+            for (int32_t root=0;roots && root<roots->get_Count();++root) { if (auto* entity=roots->get_Item(root)) { completedRoots.insert(entity); } }
+        }
+    }
     LastDrawCalls=0; LastVisibleMeshSamples=0; LastVisibleShadowSamples=0;
     for (const auto handle : Outputs) {
         Renderer.SelectOutput(static_cast<size_t>(handle)); SelectRenderWindow(handle);
@@ -123,11 +141,12 @@ void LinuxRenderManager3D::Draw() {
         auto* registered = get_OwnerCore()->get_ObjectManager()->get_Cameras();
         if (registered) { for (int32_t index=0;index<registered->get_Count();++index) { auto* camera = (*registered)[index]; if (camera && camera->get_Parent() && camera->get_Parent()->get_IsHierarchyEnabled() && IsCameraVisibleInWindow(camera,handle)) { cameras.push_back(camera); } } }
         std::stable_sort(cameras.begin(),cameras.end(),[](auto* left,auto* right) { return left->get_CameraDrawOrder() < right->get_CameraDrawOrder(); });
-        bool initialized=false;
+        bool initialized=false,completeSceneCameraRendered=false;
         for (auto* camera : cameras) {
             if (camera->get_RenderTarget()) { throw std::runtime_error("Linux native offscreen camera RenderTarget resources are not implemented."); }
             auto settings=camera->get_ClearSettings(); auto color=settings.ClearColor;
-            const std::array<float,4> clear {color.X.ToSingle(),color.Y.ToSingle(),color.Z.ToSingle(),TransparentOutputs.at(handle)?color.W.ToSingle():1.0f};
+            const float alpha=TransparentOutputs.at(handle)?std::clamp(color.W.ToSingle(),0.0f,1.0f):1.0f;
+            const std::array<float,4> clear {color.X.ToSingle()*alpha,color.Y.ToSingle()*alpha,color.Z.ToSingle()*alpha,alpha};
             auto viewport=camera->get_Viewport(); float x=viewport.X.ToSingle(),y=viewport.Y.ToSingle(),w=viewport.Z.ToSingle(),h=viewport.W.ToSingle();
             if (w>0 && h>0 && w<=1 && h<=1) { x*=Renderer.GetWidth(); y*=Renderer.GetHeight(); w*=Renderer.GetWidth(); h*=Renderer.GetHeight(); }
             if (w<=0 || h<=0) { x=y=0; w=Renderer.GetWidth(); h=Renderer.GetHeight(); }
@@ -145,11 +164,11 @@ void LinuxRenderManager3D::Draw() {
                 Renderer.BeginFrame(clear,true);
             } else { MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled); Renderer.BeginFrame(clear,true); }
             Bridge.RenderCamera(camera); LastDrawCalls+=static_cast<int32_t>(Renderer.GetQueuedDrawCount()); LastPixels=Renderer.EndFrameAndReadback(); initialized=true;
+            completeSceneCameraRendered=completeSceneCameraRendered || IsCompletedSceneCamera(camera,completedRoots);
         }
         if (!initialized) { Renderer.BeginFrame({0,0,0,TransparentOutputs.at(handle)?0.0f:1.0f}); LastPixels=Renderer.EndFrameAndReadback(); }
         OutputPixels.at(handle)=LastPixels;
-        auto* scenes=get_OwnerCore()->get_SceneManager(); auto* loaded=scenes->get_LoadedScenes();
-        OutputReadiness.at(handle)=initialized && loaded && loaded->get_Count()>0 && !scenes->get_IsSceneTransitionActive() && !scenes->get_HasPendingSceneOperations();
+        OutputReadiness.at(handle)=completeSceneCameraRendered;
     }
     Renderer.SelectOutput(1); SelectRenderWindow(1); LastPixels=OutputPixels.at(1);
 }
