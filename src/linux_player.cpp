@@ -42,6 +42,8 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <iomanip>
+#include <limits>
 #include <fstream>
 #include <stdexcept>
 
@@ -155,7 +157,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
     std::vector<float> scales;
     if (options.Offscreen) { offscreen=std::make_unique<VulkanContext>(std::span<const char* const>{},options.Validation,VK_API_VERSION_1_2); }
     for (const auto& output : outputs) {
-        if (options.Offscreen) { windows.push_back(nullptr); extents.push_back({output.Width,output.Height}); continue; }
+        if (options.Offscreen) { windows.push_back(nullptr); extents.push_back({output.Width,output.Height}); scales.push_back(1.0f); continue; }
         const auto title=options.Session.empty()?"HelEngine Linux" : "HelEngine:"+options.Session+":"+output.Tag;
         if (!window) { window=std::make_unique<SdlHost>(title.c_str(),output.Width,output.Height,options.Validation,nullptr,output.Transparent,options.Noninteractive); windows.push_back(window.get()); }
         else { secondaryWindows.push_back(std::make_unique<SdlHost>(title.c_str(),output.Width,output.Height,options.Validation,&window->GetContext(),output.Transparent,options.Noninteractive)); windows.push_back(secondaryWindows.back().get()); }
@@ -225,7 +227,7 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
                 const bool completed=options.Offscreen || windows[index]->Present(renderer,scales[index]);
                 if (!completed) { continue; } ++ticks[index];
                 if (!options.Outputs.empty()) {
-                    std::cout << "HELENGINE_OUTPUT 1 " << (options.Session.empty()?"-":options.Session) << ' ' << outputs[index].Tag << ' ' << generations[index] << ' ' << ticks[index] << ' ' << (render3d.IsOutputReady(static_cast<intptr_t>(index+1))?1:0) << ' ' << renderer.GetWidth() << ' ' << renderer.GetHeight() << '\n' << std::flush;
+                    std::cout << "HELENGINE_OUTPUT " << NativeProtocolVersion << ' ' << (options.Session.empty()?"-":options.Session) << ' ' << outputs[index].Tag << ' ' << generations[index] << ' ' << ticks[index] << ' ' << (render3d.IsOutputReady(static_cast<intptr_t>(index+1))?1:0) << ' ' << renderer.GetWidth() << ' ' << renderer.GetHeight() << ' ' << std::setprecision(std::numeric_limits<float>::max_digits10) << scales[index] << '\n' << std::flush;
                 }
             }
             renderer.SelectOutput(1); ++frames;

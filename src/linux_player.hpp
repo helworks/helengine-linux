@@ -12,6 +12,8 @@ class LinuxRenderManager3D;
 /// <summary>Runs the real generated Core, packaged scene catalog and native renderer in a normal SDL host or explicit offscreen validation mode.</summary>
 class LinuxPlayer final {
 public:
+    /// <summary>Identifies scale-bearing completed-output receipts independently of the supervisor JSON protocol.</summary>
+    static constexpr int NativeProtocolVersion = 2;
     /// <summary>Loads the selected real scene, runs simulation/render frames and reports genuine submitted work; errors remain fatal.</summary>
     static int Run(const LinuxRunOptions& options);
     /// <summary>Resolves an explicit scene ID or the embedded startup path independently from incidental catalog ordering.</summary>

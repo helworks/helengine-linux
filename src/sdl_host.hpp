@@ -2,6 +2,7 @@
 #include "vulkan_renderer_2d.hpp"
 #include <SDL3/SDL.h>
 #include <stdexcept>
+#include <cmath>
 
 namespace helengine::linux {
 /// <summary>Owns one SDL3 Vulkan window, surface and swapchain; platform surface details remain inside SDL.</summary>
@@ -22,7 +23,7 @@ public:
     /// <summary>Returns current drawable pixel size, preserving zero size while minimized.</summary>
     VkExtent2D GetDrawableSize() const;
     /// <summary>Returns the actual SDL display scale so scale-only changes invalidate output generations.</summary>
-    float GetDisplayScale() const { const float scale=SDL_GetWindowDisplayScale(Window); if (scale<=0) { throw std::runtime_error("Native output has invalid display scale."); } return scale; }
+    float GetDisplayScale() const { const float scale=SDL_GetWindowDisplayScale(Window); if (!std::isfinite(scale) || scale<=0) { throw std::runtime_error("Native output has invalid display scale."); } return scale; }
     /// <summary>Requests a logical SDL window size; the drawable extent is queried separately to respect DPI.</summary>
     void SetWindowSize(int width, int height);
     /// <summary>Blits a completed same-device RGBA target to the swapchain, recovering out-of-date/suboptimal surfaces explicitly.</summary>

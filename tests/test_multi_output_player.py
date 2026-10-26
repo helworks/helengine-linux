@@ -1,6 +1,7 @@
 """Require actual generated tagged cameras and real GPU output alpha without a desktop connection."""
 import argparse
 import os
+import math
 import re
 import secrets
 import subprocess
@@ -30,7 +31,9 @@ def main():
     if result.returncode:
         raise RuntimeError("Real generated multi-output player failed: " + str(result.returncode))
     receipts = {}
-    for tag, generation, tick, ready, width, height in re.findall(r"^HELENGINE_OUTPUT 1 " + re.escape(token) + r" ([A-Za-z0-9-]+) (\d+) (\d+) ([01]) (\d+) (\d+)$", result.stdout, re.M):
+    for tag, generation, tick, ready, width, height, scale in re.findall(r"^HELENGINE_OUTPUT 2 " + re.escape(token) + r" ([A-Za-z0-9-]+) (\d+) (\d+) ([01]) (\d+) (\d+) ([0-9.eE+-]+)$", result.stdout, re.M):
+        if not math.isfinite(float(scale)) or float(scale) != 1.0:
+            raise RuntimeError("Offscreen receipt must identify its actual unit scale")
         receipts.setdefault(tag, []).append([int(generation), int(tick), int(ready), int(width), int(height)])
     for tag, size in {"main": [640, 360], "glass": [640, 360], "absent-output": [80, 60]}.items():
         rows = receipts.get(tag, [])
