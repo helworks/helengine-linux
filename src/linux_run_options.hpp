@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <vector>
+#include "linux_output_options.hpp"
 
 namespace helengine::linux {
 /// <summary>Validates explicit player content, scene selection and isolated frame-limited execution.</summary>
@@ -10,6 +12,14 @@ public:
     LinuxRunOptions(int argc,char** argv);
     /// <summary>Stores the mandatory actual cooked content directory; no current-directory fallback is invented.</summary>
     std::string ContentRoot;
+    /// <summary>Registers independently sized tagged outputs in main-layout order.</summary>
+    std::vector<LinuxOutputOptions> Outputs;
+    /// <summary>Disables focus and the entire input region of every output.</summary>
+    bool Noninteractive = false;
+    /// <summary>Binds native role titles and completion receipts to the launching session.</summary>
+    std::string Session;
+    /// <summary>Identifies the supervisor that must remain the direct parent throughout guarded execution.</summary>
+    uint32_t ParentPid = 0;
     /// <summary>Stores an optional stable scene ID from the packaged runtime catalog.</summary>
     std::string SceneId;
     /// <summary>Stores an optional explicit validation script whose SDL events enter the ordinary generated input capture path.</summary>

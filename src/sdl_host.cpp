@@ -4,16 +4,30 @@
 #include <stdexcept>
 
 namespace helengine::linux {
-SdlHost::SdlHost(const char* title, int width, int height, bool validation) {
+SdlHost::SdlHost(const char* title, int width, int height, bool validation,VulkanContext* sharedContext,bool transparent,bool noninteractive) : Transparent(transparent) {
     try {
-        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) { throw std::runtime_error(std::string("SDL_Init(video/gamepad): ") + SDL_GetError()); }
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) { throw std::runtime_error(std::string("SDL_Init(video/gamepad): ") + SDL_GetError()); }
         VideoInitialized = true;
-        Window = SDL_CreateWindow(title,width,height,SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+        Window = SDL_CreateWindow(title,width,height,SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN | ((transparent || noninteractive) ? SDL_WINDOW_TRANSPARENT : 0) | (noninteractive ? SDL_WINDOW_NOT_FOCUSABLE : 0));
         if (!Window) { throw std::runtime_error(std::string("SDL_CreateWindow(Vulkan): ") + SDL_GetError()); }
         Uint32 count = 0; const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
         if (!extensions || !count) { throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions: ") + SDL_GetError()); }
-        Context = std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation,VK_API_VERSION_1_2,Window);
-        Surface = Context->GetSurface();
+        if (sharedContext) {
+            Context=sharedContext;
+            if (!SDL_Vulkan_CreateSurface(Window,Context->GetInstance(),nullptr,&Surface)) { throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface: ")+SDL_GetError()); }
+            OwnsSurface=true;
+            VkBool32 supported=VK_FALSE; VulkanContext::Require(vkGetPhysicalDeviceSurfaceSupportKHR(Context->GetPhysicalDevice(),Context->GetPresentQueueFamily(),Surface,&supported),"vkGetPhysicalDeviceSurfaceSupportKHR(secondary)");
+            if (!supported) { throw std::runtime_error("Shared Vulkan presentation queue cannot present the additional output."); }
+        } else {
+            OwnedContext=std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation,VK_API_VERSION_1_2,Window); Context=OwnedContext.get(); Surface=Context->GetSurface();
+        }
+        if (noninteractive) {
+            SDL_Surface* shape=SDL_CreateSurface(1,1,SDL_PIXELFORMAT_RGBA32);
+            if (!shape) { throw std::runtime_error(std::string("SDL_CreateSurface(empty input region): ")+SDL_GetError()); }
+            const bool cleared=SDL_FillSurfaceRect(shape,nullptr,0); const bool shaped=cleared && SDL_SetWindowShape(Window,shape); SDL_DestroySurface(shape);
+            if (!shaped) { throw std::runtime_error(std::string("SDL_SetWindowShape(empty input region): ")+SDL_GetError()); }
+        }
+        if (!SDL_ShowWindow(Window)) { throw std::runtime_error(std::string("SDL_ShowWindow: ")+SDL_GetError()); }
         VkSemaphoreCreateInfo semaphore {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         VulkanContext::Require(vkCreateSemaphore(Context->GetDevice(),&semaphore,nullptr,&Acquired),"vkCreateSemaphore(acquire)");
         VulkanContext::Require(vkCreateSemaphore(Context->GetDevice(),&semaphore,nullptr,&Ready),"vkCreateSemaphore(present)");
@@ -29,11 +43,11 @@ void SdlHost::Release() noexcept {
         if (Swapchain) { vkDestroySwapchainKHR(device,Swapchain,nullptr); Swapchain = VK_NULL_HANDLE; }
         if (Ready) { vkDestroySemaphore(device,Ready,nullptr); Ready = VK_NULL_HANDLE; }
         if (Acquired) { vkDestroySemaphore(device,Acquired,nullptr); Acquired = VK_NULL_HANDLE; }
-        Context.reset();
-        Surface=VK_NULL_HANDLE;
+        if (OwnsSurface && Surface) { vkDestroySurfaceKHR(Context->GetInstance(),Surface,nullptr); }
+        Surface=VK_NULL_HANDLE; OwnsSurface=false; OwnedContext.reset(); Context=nullptr;
     }
     if (Window) { SDL_DestroyWindow(Window); Window = nullptr; }
-    if (VideoInitialized) { SDL_Quit(); VideoInitialized = false; }
+    if (VideoInitialized) { SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD); VideoInitialized = false; }
 }
 
 VkExtent2D SdlHost::GetDrawableSize() const {
@@ -74,7 +88,13 @@ bool SdlHost::RecreateSwapchain() {
     create.imageExtent = Extent; create.imageArrayLayers = 1; create.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT; create.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; create.preTransform = capabilities.currentTransform;
     const uint32_t families[] {Context->GetQueueFamily(),Context->GetPresentQueueFamily()};
     if (families[0]!=families[1]) { create.imageSharingMode=VK_SHARING_MODE_CONCURRENT; create.queueFamilyIndexCount=2; create.pQueueFamilyIndices=families; }
-    create.compositeAlpha = (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR : (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) ? VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR : VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+    if (Transparent) {
+        if (!(capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)) { throw std::runtime_error("Transparent output requires supported premultiplied-alpha Vulkan composition."); }
+        create.compositeAlpha=VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+    } else {
+        if (!(capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)) { throw std::runtime_error("Opaque output requires opaque Vulkan composition."); }
+        create.compositeAlpha=VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    }
     create.presentMode = VK_PRESENT_MODE_FIFO_KHR; create.clipped = VK_TRUE; create.oldSwapchain = Swapchain;
     VulkanContext::Require(vkDeviceWaitIdle(Context->GetDevice()),"vkDeviceWaitIdle(swapchain)");
     VkSwapchainKHR replacement = VK_NULL_HANDLE;

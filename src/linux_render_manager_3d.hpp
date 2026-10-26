@@ -45,6 +45,14 @@ public:
     void Visit(::IDrawable3D* drawable) override;
     /// <summary>Visits active cameras in authored order, renders generated 2D commands and synchronizes one complete frame.</summary>
     void Draw() override;
+    /// <summary>Registers one generated window and its same-device target before Core initialization.</summary>
+    void AddWindow(intptr_t handle,int32_t width,int32_t height) override;
+    /// <summary>Specifies whether a registered output preserves transparent clear alpha.</summary>
+    void SetOutputTransparent(intptr_t handle,bool transparent);
+    /// <summary>Reports complete scene-camera work for the selected output in the most recent draw.</summary>
+    bool IsOutputReady(intptr_t handle) const;
+    /// <summary>Borrows the completed GPU readback retained independently for a registered output.</summary>
+    const std::vector<uint8_t>& GetOutputPixels(intptr_t handle) const;
     /// <summary>Reports real submitted draw calls for menu/core smoke tests and generated diagnostics.</summary>
     int32_t get_LastDrawCallCount() override { return LastDrawCalls; }
     /// <summary>Returns the latest actual GPU readback without saving a desktop screenshot or generated image file.</summary>
@@ -54,6 +62,14 @@ public:
     /// <summary>Reports actual depth-tested caster samples from all shadow atlas tiles and cube faces in the latest frame.</summary>
     uint64_t GetLastVisibleShadowSamples() const { return LastVisibleShadowSamples; }
 private:
+    /// <summary>Stores output handles in stable registration and presentation order.</summary>
+    std::vector<intptr_t> Outputs;
+    /// <summary>Preserves the requested alpha policy separately from native window focus/input policy.</summary>
+    std::unordered_map<intptr_t,bool> TransparentOutputs;
+    /// <summary>Retains completed camera readiness independently for each output.</summary>
+    std::unordered_map<intptr_t,bool> OutputReadiness;
+    /// <summary>Retains actual synchronized GPU bytes for each completed output.</summary>
+    std::unordered_map<intptr_t,std::vector<uint8_t>> OutputPixels;
     /// <summary>Finds the exact authored program and stage rather than substituting a default shader.</summary>
     static ::ShaderProgramAsset* FindProgram(::ShaderAsset* shader,HeCppString name,::ShaderStage stage);
     /// <summary>Copies the exact target/program/stage/variant binary into aligned SPIR-V words.</summary>

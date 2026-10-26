@@ -54,11 +54,12 @@ public static class LinuxBuildWorkspace {
         },new JsonSerializerOptions { WriteIndented = true }),cancellationToken);
         if (!assetsOnly) {
             string repository = ResolveRepositoryRoot();
-            string nativeRoot = string.IsNullOrWhiteSpace(request.NativeObjectCacheRoot) ? "/tmp/helengine/linux" : Path.GetFullPath(request.NativeObjectCacheRoot);
+            string nativeRoot = LinuxNativeBuildExecutor.ResolveBuildRoot(request.NativeObjectCacheRoot);
             string player = await LinuxNativeBuildExecutor.BuildAsync(repository,nativeRoot,request.GeneratedCoreCppRootPath,Path.Combine(Directory.GetCurrentDirectory(),"code"),content,profile,
                 ReadGraphicsDimension(request.SelectedGraphicsOptionValues,"default-width"),ReadGraphicsDimension(request.SelectedGraphicsOptionValues,"default-height"),cancellationToken);
             File.Copy(player,Path.Combine(content,"helengine_linux"),true);
             CopyNativeRuntime(nativeRoot,content);
+            await LinuxRuntimeManifestWriter.WriteAsync(content,request.Manifest,cancellationToken);
         }
         return new PlatformBuildReport(true,[],scenes.ToArray(),assets.ToArray());
     }

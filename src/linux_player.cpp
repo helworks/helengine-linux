@@ -1,4 +1,5 @@
 #include "linux_player.hpp"
+#include "linux_session_guard.hpp"
 #include "generated_disposable_deleter.hpp"
 #include "linux_render_manager_2d.hpp"
 #include "linux_render_manager_3d.hpp"
@@ -141,14 +142,29 @@ void LinuxPlayer::ValidateShadowReception(::Core* core,LinuxRenderManager3D& ren
 }
 
 int LinuxPlayer::Run(const LinuxRunOptions& options) {
+    if (!options.Session.empty()) { LinuxSessionGuard::Activate(options.Session,options.ParentPid); }
     std::unique_ptr<LinuxInputReplay> replay;
     if (!options.InputScript.empty()) { std::ifstream script(options.InputScript); replay=std::make_unique<LinuxInputReplay>(script); }
+    std::vector<LinuxOutputOptions> outputs=options.Outputs;
+    if (outputs.empty()) { LinuxOutputOptions output; output.Width=HELENGINE_LINUX_INITIAL_WIDTH; output.Height=HELENGINE_LINUX_INITIAL_HEIGHT; outputs.push_back(output); }
     std::unique_ptr<SdlHost> window;
     std::unique_ptr<VulkanContext> offscreen;
+    std::vector<std::unique_ptr<SdlHost>> secondaryWindows;
+    std::vector<SdlHost*> windows;
+    std::vector<VkExtent2D> extents;
+    std::vector<float> scales;
     if (options.Offscreen) { offscreen=std::make_unique<VulkanContext>(std::span<const char* const>{},options.Validation,VK_API_VERSION_1_2); }
-    else { window=std::make_unique<SdlHost>("HelEngine Linux",HELENGINE_LINUX_INITIAL_WIDTH,HELENGINE_LINUX_INITIAL_HEIGHT,options.Validation); }
+    for (const auto& output : outputs) {
+        if (options.Offscreen) { windows.push_back(nullptr); extents.push_back({output.Width,output.Height}); continue; }
+        const auto title=options.Session.empty()?"HelEngine Linux" : "HelEngine:"+options.Session+":"+output.Tag;
+        if (!window) { window=std::make_unique<SdlHost>(title.c_str(),output.Width,output.Height,options.Validation,nullptr,output.Transparent,options.Noninteractive); windows.push_back(window.get()); }
+        else { secondaryWindows.push_back(std::make_unique<SdlHost>(title.c_str(),output.Width,output.Height,options.Validation,&window->GetContext(),output.Transparent,options.Noninteractive)); windows.push_back(secondaryWindows.back().get()); }
+        scales.push_back(windows.back()->GetDisplayScale());
+        const auto extent=windows.back()->GetDrawableSize();
+        if (!extent.width || !extent.height) { throw std::runtime_error("Native output has no drawable extent during initialization."); } extents.push_back(extent);
+    }
     VulkanContext& graphics=window ? window->GetContext() : *offscreen;
-    VulkanRenderer2D renderer(graphics,HELENGINE_LINUX_INITIAL_WIDTH,HELENGINE_LINUX_INITIAL_HEIGHT,(std::filesystem::path(options.ContentRoot)/"shaders").string());
+    VulkanRenderer2D renderer(graphics,extents[0].width,extents[0].height,(std::filesystem::path(options.ContentRoot)/"shaders").string());
     LinuxRenderManager2D render2d(renderer); render2d.SetTextCommandReuseMemoryBudgetBytes(he_get_runtime_render2d_text_command_reuse_memory_budget_bytes());
     LinuxRenderManager3D render3d(renderer,render2d); SdlInputBackend input(options.Offscreen);
     std::unique_ptr<SdlReplayGamepad> replayGamepad;
@@ -163,7 +179,14 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
     initialization.SceneLoadingBudgetMilliseconds=he_get_runtime_scene_loading_budget_milliseconds(); initialization.PlatformSettingsConfiguration=settings.get();
     initialization.CpuProfileSink=GetLinuxCpuProfileSink();
     ::Core core(&initialization); ::PlatformInfo platform(he_get_runtime_platform_name(),he_get_runtime_platform_version());
-    render3d.AddWindow(1,HELENGINE_LINUX_INITIAL_WIDTH,HELENGINE_LINUX_INITIAL_HEIGHT); render3d.set_ShadowsEnabled(he_get_runtime_shadows_enabled());
+    for (size_t index=0;index<outputs.size();++index) {
+        const intptr_t handle=static_cast<intptr_t>(index+1); render3d.AddWindow(handle,extents[index].width,extents[index].height);
+        if (!outputs[index].Tag.empty()) { render3d.SetWindowTag(handle,outputs[index].Tag); }
+        render3d.SetOutputTransparent(handle,outputs[index].Transparent);
+    }
+    render3d.set_ShadowsEnabled(he_get_runtime_shadows_enabled());
+    std::vector<uint64_t> generations(outputs.size(),1),ticks(outputs.size(),0);
+    std::vector<bool> active(outputs.size(),true);
     bool coreNeedsShutdown=false;
     try {
         core.Initialize(&render3d,&render2d,&input,&platform,&initialization); coreNeedsShutdown=true; RegisterGeneratedRuntimeModules(&core);
@@ -175,10 +198,17 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
         std::string lastScene,lastMenu;
         while (running && (!options.Frames || frames<options.Frames)) {
             if (window) {
-                SDL_Event event {}; while (window->PollEvent(event)) { input.HandleEvent(event); if (event.type==SDL_EVENT_QUIT) { running=false; } }
-                const auto size=window->GetDrawableSize();
-                if (!size.width || !size.height) { SDL_Delay(16); continue; }
-                if (size.width!=renderer.GetWidth() || size.height!=renderer.GetHeight()) { renderer.Resize(size.width,size.height); render3d.OnWindowResize(1,size.width,size.height); }
+                SDL_Event event {}; while (window->PollEvent(event)) { if (!options.Noninteractive) { input.HandleEvent(event); } if (event.type==SDL_EVENT_QUIT || event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED) { running=false; } }
+                bool anyActive=false;
+                for (size_t index=0;index<outputs.size();++index) {
+                    const auto size=windows[index]->GetDrawableSize(); active[index]=size.width && size.height;
+                    if (!active[index]) { continue; } anyActive=true;
+                    const auto scale=windows[index]->GetDisplayScale();
+                    if (size.width!=extents[index].width || size.height!=extents[index].height || scale!=scales[index]) {
+                        scales[index]=scale; extents[index]=size; ++generations[index]; render3d.OnWindowResize(static_cast<intptr_t>(index+1),size.width,size.height);
+                    }
+                }
+                if (!anyActive) { SDL_Delay(16); continue; }
             }
             if (replay) { if (options.Offscreen) { input.set_ReceiveInputInBackground(true); } for (const auto& event : replay->EventsForFrame(frames)) { if (event.type==SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type==SDL_EVENT_GAMEPAD_BUTTON_UP) { replayGamepad->Apply(event); std::cout << "replay_frame=" << frames << " gamepad_button=" << static_cast<int>(event.gbutton.button) << " down=" << event.gbutton.down << '\n'; } else { input.HandleEvent(event); std::cout << "replay_frame=" << frames << " scancode=" << event.key.scancode << " down=" << event.key.down << '\n'; } } }
             const auto now=std::chrono::steady_clock::now();
@@ -189,11 +219,28 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
             auto* loaded=core.get_SceneManager()->get_LoadedScenes();
             if (loaded && loaded->get_Count()>0) { const auto current=loaded->get_Item(loaded->get_Count()-1)->get_SceneId().raw(); if (current!=lastScene) { std::cout << "loaded_scene_frame=" << frames << " scene=" << current << '\n'; lastScene=current; } }
             if (replay) { const auto state=SnapshotMenuState(&core); if (state!=lastMenu) { std::cout << "menu_state_frame=" << frames << ' ' << state << '\n'; lastMenu=state; } }
-            if (window) { window->Present(renderer); } ++frames;
+            for (size_t index=0;index<outputs.size();++index) {
+                if (!active[index]) { continue; }
+                renderer.SelectOutput(index+1);
+                const bool completed=options.Offscreen || windows[index]->Present(renderer);
+                if (!completed) { continue; } ++ticks[index];
+                if (!options.Outputs.empty()) {
+                    std::cout << "HELENGINE_OUTPUT 1 " << (options.Session.empty()?"-":options.Session) << ' ' << outputs[index].Tag << ' ' << generations[index] << ' ' << ticks[index] << ' ' << (render3d.IsOutputReady(static_cast<intptr_t>(index+1))?1:0) << ' ' << renderer.GetWidth() << ' ' << renderer.GetHeight() << '\n' << std::flush;
+                }
+            }
+            renderer.SelectOutput(1); ++frames;
         }
         if (replay && !replay->IsComplete()) { throw std::runtime_error("Linux player stopped before all explicit input replay events were captured."); }
         if (options.RequireShadowReception) { ValidateShadowReception(&core,render3d,renderer.GetWidth(),renderer.GetHeight()); }
         if (graphics.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation errors occurred during actual generated-core execution."); }
+        if (!options.Outputs.empty()) {
+            for (size_t index=0;index<outputs.size();++index) {
+                const auto& outputPixels=render3d.GetOutputPixels(static_cast<intptr_t>(index+1)); uint64_t outputChecksum=1469598103934665603ULL; size_t zero=0,partial=0,opaque=0;
+                for (const auto byte : outputPixels) { outputChecksum=(outputChecksum^byte)*1099511628211ULL; }
+                for (size_t pixel=3;pixel<outputPixels.size();pixel+=4) { if (!outputPixels[pixel]) { ++zero; } else if (outputPixels[pixel]==255) { ++opaque; } else { ++partial; } }
+                std::cout << "output=" << outputs[index].Tag << " rgba_bytes=" << outputPixels.size() << " checksum=" << outputChecksum << " alpha_zero=" << zero << " alpha_partial=" << partial << " alpha_opaque=" << opaque << '\n';
+            }
+        }
         uint64_t checksum=1469598103934665603ULL;
         for (uint8_t byte : render3d.GetLastPixels()) { checksum=(checksum^byte)*1099511628211ULL; }
         bool nonuniform=false; const auto& pixels=render3d.GetLastPixels();

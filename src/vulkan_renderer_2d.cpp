@@ -16,6 +16,8 @@ void VulkanRenderer2D::Release() noexcept {
     VkDevice device = Context.GetDevice(); vkDeviceWaitIdle(device);
     if (Framebuffer) { vkDestroyFramebuffer(device, Framebuffer, nullptr); Framebuffer = VK_NULL_HANDLE; }
     Target.reset();
+    for (const auto& output : OutputFramebuffers) { if (output.second) { vkDestroyFramebuffer(device,output.second,nullptr); } }
+    OutputFramebuffers.clear(); OutputImages.clear();
     if (Pipeline) { vkDestroyPipeline(device, Pipeline, nullptr); Pipeline = VK_NULL_HANDLE; }
     if (PipelineLayout) { vkDestroyPipelineLayout(device, PipelineLayout, nullptr); PipelineLayout = VK_NULL_HANDLE; }
     if (LoadRenderPass) { vkDestroyRenderPass(device, LoadRenderPass, nullptr); LoadRenderPass = VK_NULL_HANDLE; }
@@ -94,6 +96,28 @@ void VulkanRenderer2D::InitializePipeline() {
         VulkanContext::Require(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline, nullptr, &Pipeline), "vkCreateGraphicsPipelines(2D)");
     } catch (...) { if (vertex) { vkDestroyShaderModule(device, vertex, nullptr); } if (fragment) { vkDestroyShaderModule(device, fragment, nullptr); } throw; }
     vkDestroyShaderModule(device, vertex, nullptr); vkDestroyShaderModule(device, fragment, nullptr);
+}
+
+void VulkanRenderer2D::AddOutput(size_t handle,uint32_t width,uint32_t height) {
+    if (!handle || handle==ActiveOutput || OutputImages.contains(handle)) { throw std::invalid_argument("Output handle must be nonzero and unique."); }
+    if (FrameActive) { throw std::logic_error("Cannot register an output during a frame."); }
+    const size_t previous=ActiveOutput;
+    OutputImages.emplace(previous,std::move(Target)); OutputFramebuffers.emplace(previous,Framebuffer);
+    Framebuffer=VK_NULL_HANDLE; Width=Height=0; ActiveOutput=handle;
+    try { if (!Resize(width,height)) { throw std::invalid_argument("Output extent must be nonzero."); } }
+    catch (...) { Target=std::move(OutputImages.at(previous)); OutputImages.erase(previous); Framebuffer=OutputFramebuffers.at(previous); OutputFramebuffers.erase(previous); ActiveOutput=previous; Width=Target->GetWidth(); Height=Target->GetHeight(); throw; }
+    SelectOutput(previous);
+}
+
+void VulkanRenderer2D::SelectOutput(size_t handle) {
+    if (FrameActive) { throw std::logic_error("Cannot select an output during a frame."); }
+    if (handle==ActiveOutput) { return; }
+    const auto found=OutputImages.find(handle);
+    if (found==OutputImages.end()) { throw std::invalid_argument("Output handle is not registered."); }
+    auto image=std::move(found->second); OutputImages.erase(found);
+    const auto framebuffer=OutputFramebuffers.at(handle); OutputFramebuffers.erase(handle);
+    OutputImages.emplace(ActiveOutput,std::move(Target)); OutputFramebuffers.emplace(ActiveOutput,Framebuffer);
+    Target=std::move(image); Framebuffer=framebuffer; Width=Target->GetWidth(); Height=Target->GetHeight(); ActiveOutput=handle;
 }
 
 bool VulkanRenderer2D::Resize(uint32_t width, uint32_t height) {

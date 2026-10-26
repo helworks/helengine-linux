@@ -10,6 +10,7 @@
 #include "IDrawable3D.hpp"
 #include <numeric>
 #include "Core.hpp"
+#include "SceneManager.hpp"
 #include "ObjectManager.hpp"
 #include "ICamera.hpp"
 #include "Entity.hpp"
@@ -101,35 +102,55 @@ void LinuxRenderManager3D::Visit(::IDrawable3D* drawable) {
     }
 }
 
+void LinuxRenderManager3D::AddWindow(intptr_t handle,int32_t width,int32_t height) {
+    if (handle<=0 || width<=0 || height<=0 || TransparentOutputs.contains(handle)) { throw std::invalid_argument("Native output requires a unique positive handle and dimensions."); }
+    if (Outputs.empty()) { if (handle!=1) { throw std::invalid_argument("Initial native output handle must be 1."); } Renderer.SelectOutput(1); Renderer.Resize(width,height); }
+    else { Renderer.AddOutput(static_cast<size_t>(handle),width,height); }
+    ::RenderManager3D::AddWindow(handle,width,height); Outputs.push_back(handle); TransparentOutputs.emplace(handle,false); OutputReadiness.emplace(handle,false); OutputPixels.emplace(handle,std::vector<uint8_t>{});
+}
+
+void LinuxRenderManager3D::SetOutputTransparent(intptr_t handle,bool transparent) { TransparentOutputs.at(handle)=transparent; }
+bool LinuxRenderManager3D::IsOutputReady(intptr_t handle) const { return OutputReadiness.at(handle); }
+const std::vector<uint8_t>& LinuxRenderManager3D::GetOutputPixels(intptr_t handle) const { return OutputPixels.at(handle); }
+
 void LinuxRenderManager3D::Draw() {
     if (Disposed || !get_OwnerCore() || !get_OwnerCore()->get_ObjectManager()) { throw std::logic_error("Linux camera dispatch requires initialized generated Core/ObjectManager and a live renderer."); }
-    std::vector<::ICamera*> cameras;
-    auto* registered = get_OwnerCore()->get_ObjectManager()->get_Cameras();
-    if (registered) { for (int32_t index=0;index<registered->get_Count();++index) { auto* camera = (*registered)[index]; if (camera && camera->get_Parent() && camera->get_Parent()->get_IsHierarchyEnabled() && IsCameraVisibleInWindow(camera,get_MainWindowHandle())) { cameras.push_back(camera); } } }
-    std::stable_sort(cameras.begin(),cameras.end(),[](auto* left,auto* right) { return left->get_CameraDrawOrder() < right->get_CameraDrawOrder(); });
-    LastDrawCalls=0; LastVisibleMeshSamples=0; LastVisibleShadowSamples=0; bool initialized=false;
-    for (auto* camera : cameras) {
-        if (camera->get_RenderTarget()) { throw std::runtime_error("Linux native offscreen camera RenderTarget resources are not implemented."); }
-        auto settings=camera->get_ClearSettings(); auto color=settings.ClearColor;
-        const std::array<float,4> clear {color.X.ToSingle(),color.Y.ToSingle(),color.Z.ToSingle(),color.W.ToSingle()};
-        auto viewport=camera->get_Viewport(); float x=viewport.X.ToSingle(),y=viewport.Y.ToSingle(),w=viewport.Z.ToSingle(),h=viewport.W.ToSingle();
-        if (w>0 && h>0 && w<=1 && h<=1) { x*=Renderer.GetWidth(); y*=Renderer.GetHeight(); w*=Renderer.GetWidth(); h*=Renderer.GetHeight(); }
-        if (w<=0 || h<=0) { x=y=0; w=Renderer.GetWidth(); h=Renderer.GetHeight(); }
-        auto* queue=camera->get_RenderQueue3D(); const bool has3d=queue && queue->get_Count()>0;
-        if (has3d) {
-            if (!settings.ClearDepthEnabled || settings.ClearDepth!=1.0f) { throw std::runtime_error("Linux 3D camera requires explicit depth clear 1 until authored depth retention is implemented."); }
-            auto position=camera->get_Parent()->get_Position(); auto orientation=camera->get_Parent()->get_Orientation();
-            auto forward=::float4::RotateVector(::float3(0.0f,0.0f,-1.0f),orientation); auto up=::float4::RotateVector(::float3(0.0f,1.0f,0.0f),orientation); auto target=position+forward;
-            ::float4x4 view,projection; ::float4x4::CreateLookAt__ref0_ref1_ref2_out3(position,target,up,view);
-            ::float4x4::CreatePerspectiveFieldOfView__out4(camera->get_FieldOfView(),w/h,camera->get_NearPlaneDistance(),camera->get_FarPlaneDistance(),projection);
-            ::float4x4::Multiply__ref0_ref1_out2(view,projection,CurrentViewProjection); CurrentCameraPosition=position; CurrentCamera=camera;
-            try { PrepareCameraLights(camera); PrepareCameraShadows(camera); queue->VisitOrdered(this); CurrentCamera=nullptr; MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled,{{static_cast<int32_t>(x),static_cast<int32_t>(y)},{static_cast<uint32_t>(w),static_cast<uint32_t>(h)}}); }
-            catch (...) { CurrentCamera=nullptr; MeshRenderer.DiscardFrame(); throw; }
-            LastVisibleMeshSamples+=MeshRenderer.GetLastVisibleSamples();
-            Renderer.BeginFrame(clear,true);
-        } else { MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled); Renderer.BeginFrame(clear,true); }
-        Bridge.RenderCamera(camera); LastDrawCalls+=static_cast<int32_t>(Renderer.GetQueuedDrawCount()); LastPixels=Renderer.EndFrameAndReadback(); initialized=true;
+    LastDrawCalls=0; LastVisibleMeshSamples=0; LastVisibleShadowSamples=0;
+    for (const auto handle : Outputs) {
+        Renderer.SelectOutput(static_cast<size_t>(handle)); SelectRenderWindow(handle);
+        const auto size=GetWindowSize(handle); Renderer.Resize(static_cast<uint32_t>(size.X),static_cast<uint32_t>(size.Y));
+        std::vector<::ICamera*> cameras;
+        auto* registered = get_OwnerCore()->get_ObjectManager()->get_Cameras();
+        if (registered) { for (int32_t index=0;index<registered->get_Count();++index) { auto* camera = (*registered)[index]; if (camera && camera->get_Parent() && camera->get_Parent()->get_IsHierarchyEnabled() && IsCameraVisibleInWindow(camera,handle)) { cameras.push_back(camera); } } }
+        std::stable_sort(cameras.begin(),cameras.end(),[](auto* left,auto* right) { return left->get_CameraDrawOrder() < right->get_CameraDrawOrder(); });
+        bool initialized=false;
+        for (auto* camera : cameras) {
+            if (camera->get_RenderTarget()) { throw std::runtime_error("Linux native offscreen camera RenderTarget resources are not implemented."); }
+            auto settings=camera->get_ClearSettings(); auto color=settings.ClearColor;
+            const std::array<float,4> clear {color.X.ToSingle(),color.Y.ToSingle(),color.Z.ToSingle(),TransparentOutputs.at(handle)?color.W.ToSingle():1.0f};
+            auto viewport=camera->get_Viewport(); float x=viewport.X.ToSingle(),y=viewport.Y.ToSingle(),w=viewport.Z.ToSingle(),h=viewport.W.ToSingle();
+            if (w>0 && h>0 && w<=1 && h<=1) { x*=Renderer.GetWidth(); y*=Renderer.GetHeight(); w*=Renderer.GetWidth(); h*=Renderer.GetHeight(); }
+            if (w<=0 || h<=0) { x=y=0; w=Renderer.GetWidth(); h=Renderer.GetHeight(); }
+            auto* queue=camera->get_RenderQueue3D(); const bool has3d=queue && queue->get_Count()>0;
+            if (has3d) {
+                if (!settings.ClearDepthEnabled || settings.ClearDepth!=1.0f) { throw std::runtime_error("Linux 3D camera requires explicit depth clear 1 until authored depth retention is implemented."); }
+                auto position=camera->get_Parent()->get_Position(); auto orientation=camera->get_Parent()->get_Orientation();
+                auto forward=::float4::RotateVector(::float3(0.0f,0.0f,-1.0f),orientation); auto up=::float4::RotateVector(::float3(0.0f,1.0f,0.0f),orientation); auto target=position+forward;
+                ::float4x4 view,projection; ::float4x4::CreateLookAt__ref0_ref1_ref2_out3(position,target,up,view);
+                ::float4x4::CreatePerspectiveFieldOfView__out4(camera->get_FieldOfView(),w/h,camera->get_NearPlaneDistance(),camera->get_FarPlaneDistance(),projection);
+                ::float4x4::Multiply__ref0_ref1_out2(view,projection,CurrentViewProjection); CurrentCameraPosition=position; CurrentCamera=camera;
+                try { PrepareCameraLights(camera); PrepareCameraShadows(camera); queue->VisitOrdered(this); CurrentCamera=nullptr; MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled,{{static_cast<int32_t>(x),static_cast<int32_t>(y)},{static_cast<uint32_t>(w),static_cast<uint32_t>(h)}}); }
+                catch (...) { CurrentCamera=nullptr; MeshRenderer.DiscardFrame(); throw; }
+                LastVisibleMeshSamples+=MeshRenderer.GetLastVisibleSamples();
+                Renderer.BeginFrame(clear,true);
+            } else { MeshRenderer.RenderFrame(Renderer.GetOutputImageView(),Renderer.GetWidth(),Renderer.GetHeight(),clear,initialized&&!settings.ClearColorEnabled); Renderer.BeginFrame(clear,true); }
+            Bridge.RenderCamera(camera); LastDrawCalls+=static_cast<int32_t>(Renderer.GetQueuedDrawCount()); LastPixels=Renderer.EndFrameAndReadback(); initialized=true;
+        }
+        if (!initialized) { Renderer.BeginFrame({0,0,0,TransparentOutputs.at(handle)?0.0f:1.0f}); LastPixels=Renderer.EndFrameAndReadback(); }
+        OutputPixels.at(handle)=LastPixels;
+        auto* scenes=get_OwnerCore()->get_SceneManager(); auto* loaded=scenes->get_LoadedScenes();
+        OutputReadiness.at(handle)=initialized && loaded && loaded->get_Count()>0 && !scenes->get_IsSceneTransitionActive() && !scenes->get_HasPendingSceneOperations();
     }
-    if (!initialized) { Renderer.BeginFrame({0,0,0,1}); LastPixels=Renderer.EndFrameAndReadback(); }
+    Renderer.SelectOutput(1); SelectRenderWindow(1); LastPixels=OutputPixels.at(1);
 }
 }

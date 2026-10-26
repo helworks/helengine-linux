@@ -4,6 +4,15 @@ namespace helengine.linux.builder;
 
 /// <summary>Invokes CMake/Ninja directly with structured arguments so spaces, Unicode, failures and cancellation survive the host boundary.</summary>
 public static class LinuxNativeBuildExecutor {
+    /// <summary>Uses an explicit absolute fixed build root when requested, otherwise preserving the normal per-request cache location.</summary>
+    public static string ResolveBuildRoot(string requestedRoot) {
+        string configured = Environment.GetEnvironmentVariable("HELENGINE_LINUX_NATIVE_BUILD_ROOT");
+        if (configured != null) {
+            if (string.IsNullOrWhiteSpace(configured) || !Path.IsPathFullyQualified(configured)) { throw new ArgumentException("HELENGINE_LINUX_NATIVE_BUILD_ROOT must be an absolute build directory."); }
+            return Path.GetFullPath(configured);
+        }
+        return string.IsNullOrWhiteSpace(requestedRoot) ? "/tmp/helengine/linux" : Path.GetFullPath(requestedRoot);
+    }
     /// <summary>Creates an inspectable configure request without composing shell code or quoting arguments manually.</summary>
     public static ProcessStartInfo CreateConfigureCommand(string repositoryRoot, string buildRoot, string coreRoot, string codeRoot, string contentRoot, string profile, int width=1280, int height=720) {
         if (profile != "Debug" && profile != "Release" && profile != "Profiler") { throw new ArgumentException("Native Linux profile must be Debug, Release, or Profiler.",nameof(profile)); }

@@ -8,7 +8,7 @@ using helengine.linux.builder;
 internal static class StagingContractTests {
     /// <summary>Runs against a fixed temporary package root and deletes only the test-owned fixture afterwards.</summary>
     public static async Task RunAsync() {
-        string root = OperatingSystem.IsWindows() ? "C:/temp/helengine/linux/package-contract" : "/tmp/helengine/linux/package-contract";
+        string root = Path.Combine(Environment.GetEnvironmentVariable("HELENGINE_LINUX_TEST_OUTPUT") ?? (OperatingSystem.IsWindows() ? "C:/temp/helengine/linux" : "/tmp/helengine/linux"),"package-contract");
         string previous = Directory.GetCurrentDirectory();
         Directory.CreateDirectory(Path.Combine(root,"cooked","textures"));
         try {
@@ -23,6 +23,7 @@ internal static class StagingContractTests {
                 Path.Combine(root,"output"),Path.Combine(root,"work"),"debug","vulkan","default",new Dictionary<string,string>(),new Dictionary<string,string>(),new Dictionary<string,string>(),executionScope:PlatformBuildExecutionScope.AssetsOnly);
             ContractReporter reporter = new();
             await new LinuxPlatformAssetBuilder().BuildAsync(request,reporter,reporter,CancellationToken.None);
+            if (File.Exists(Path.Combine(root,"work","content","build-manifest.json"))) { throw new InvalidOperationException("Assets-only build claimed a completed native package manifest."); }
             string destination = Path.Combine(root,"work","content","cooked","textures","logo.hele");
             if (!File.Exists(destination) || !File.ReadAllBytes(destination).SequenceEqual(new byte[] {4,5,6,7})) { throw new InvalidOperationException("Assets-only Linux build omitted a CookedArtifacts-only texture dependency."); }
             File.Delete("cooked/textures/logo.hele");

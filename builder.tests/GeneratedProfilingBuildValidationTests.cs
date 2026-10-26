@@ -11,7 +11,7 @@ internal sealed class GeneratedProfilingBuildValidationTests : IPlatformBuildPro
     public static void Run(IPlatformAssetBuilder builder) {
         string target = builder.Definition.PlatformId;
         if (target != "linux" && target != "macos" && target != "ios") { throw new InvalidOperationException("Unknown test target."); }
-        string root = Path.GetFullPath(Path.Combine(OperatingSystem.IsWindows() ? "C:/temp/helengine" : "/tmp/helengine", target, "profiling-policy-test"));
+        string root = Path.GetFullPath(Path.Combine(Environment.GetEnvironmentVariable("HELENGINE_LINUX_TEST_OUTPUT") ?? Path.Combine(OperatingSystem.IsWindows() ? "C:/temp/helengine" : "/tmp/helengine",target), "profiling-policy-test"));
         if (Directory.Exists(root)) { throw new InvalidOperationException("Profiling policy test requires its fixed output path to be absent: " + root); }
         GeneratedProfilingBuildValidationTests reporter = new();
         try {
@@ -33,7 +33,7 @@ internal sealed class GeneratedProfilingBuildValidationTests : IPlatformBuildPro
                 if (Directory.Exists(root)) { throw new InvalidOperationException("Unsupported profiling started output staging before validation."); }
             }
         } finally {
-            string expected = Path.GetFullPath(Path.Combine(OperatingSystem.IsWindows() ? "C:/temp/helengine" : "/tmp/helengine", target, "profiling-policy-test"));
+            string expected = Path.GetFullPath(Path.Combine(Environment.GetEnvironmentVariable("HELENGINE_LINUX_TEST_OUTPUT") ?? Path.Combine(OperatingSystem.IsWindows() ? "C:/temp/helengine" : "/tmp/helengine",target), "profiling-policy-test"));
             if (root != expected) { throw new InvalidOperationException("Refusing to clean an unexpected profiling test path."); }
             if (Directory.Exists(root)) { Directory.Delete(root, true); }
         }

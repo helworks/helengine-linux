@@ -7,6 +7,7 @@
 #include <memory>
 #include <span>
 #include <vector>
+#include <unordered_map>
 
 namespace helengine::linux {
 /// <summary>Renders ordered textured quads into a synchronized RGBA8 target; this low-level renderer has no simulation or generated-core dependency.</summary>
@@ -28,6 +29,10 @@ public:
     void ReleaseTexture(size_t texture);
     /// <summary>Recreates a target only for a nonzero drawable size; minimized windows retain their last valid target.</summary>
     bool Resize(uint32_t width, uint32_t height);
+    /// <summary>Allocates an independent attachment on this device while retaining shared pipelines and texture handles.</summary>
+    void AddOutput(size_t handle,uint32_t width,uint32_t height);
+    /// <summary>Selects a previously registered attachment outside an active frame without changing any other output.</summary>
+    void SelectOutput(size_t handle);
     /// <summary>Begins a frame with an explicit clear color and an empty clipping stack.</summary>
     void BeginFrame(std::array<float, 4> clear, bool loadExistingColor = false);
     /// <summary>Appends six ordered vertices with normalized UVs and the currently active clip rectangle.</summary>
@@ -73,6 +78,12 @@ private:
     std::string ShaderRoot;
     /// <summary>Owns the current RGBA8 output attachment.</summary>
     std::unique_ptr<GpuImage> Target;
+    /// <summary>Owns images for inactive outputs; the selected image remains in Target.</summary>
+    std::unordered_map<size_t,std::unique_ptr<GpuImage>> OutputImages;
+    /// <summary>Owns compatible framebuffers for inactive outputs.</summary>
+    std::unordered_map<size_t,VkFramebuffer> OutputFramebuffers;
+    /// <summary>Identifies the selected attachment; the initial single output retains handle 1.</summary>
+    size_t ActiveOutput = 1;
     /// <summary>Owns sampled textures in stable handle order.</summary>
     std::vector<std::unique_ptr<GpuImage>> Textures;
     /// <summary>Stores one descriptor set per texture; the descriptor pool owns their lifetime.</summary>
