@@ -1,4 +1,5 @@
 #include "sdl_host.hpp"
+#include "wayland_input_region.hpp"
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
 #include <stdexcept>
@@ -8,8 +9,9 @@ SdlHost::SdlHost(const char* title, int width, int height, bool validation,Vulka
     try {
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) { throw std::runtime_error(std::string("SDL_Init(video/gamepad): ") + SDL_GetError()); }
         VideoInitialized = true;
-        Window = SDL_CreateWindow(title,width,height,SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN | ((transparent || noninteractive) ? SDL_WINDOW_TRANSPARENT : 0) | (noninteractive ? SDL_WINDOW_NOT_FOCUSABLE : 0));
+        Window = SDL_CreateWindow(title,width,height,SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN | ((transparent || noninteractive) ? SDL_WINDOW_TRANSPARENT : 0) | (noninteractive ? (SDL_WINDOW_NOT_FOCUSABLE | SDL_WINDOW_BORDERLESS) : 0));
         if (!Window) { throw std::runtime_error(std::string("SDL_CreateWindow(Vulkan): ") + SDL_GetError()); }
+        if (noninteractive) { WaylandInputRegion inputRegion(Window); }
         Uint32 count = 0; const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
         if (!extensions || !count) { throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions: ") + SDL_GetError()); }
         if (sharedContext) {
@@ -20,12 +22,6 @@ SdlHost::SdlHost(const char* title, int width, int height, bool validation,Vulka
             if (!supported) { throw std::runtime_error("Shared Vulkan presentation queue cannot present the additional output."); }
         } else {
             OwnedContext=std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation,VK_API_VERSION_1_2,Window); Context=OwnedContext.get(); Surface=Context->GetSurface();
-        }
-        if (noninteractive) {
-            SDL_Surface* shape=SDL_CreateSurface(1,1,SDL_PIXELFORMAT_RGBA32);
-            if (!shape) { throw std::runtime_error(std::string("SDL_CreateSurface(empty input region): ")+SDL_GetError()); }
-            const bool cleared=SDL_FillSurfaceRect(shape,nullptr,0); const bool shaped=cleared && SDL_SetWindowShape(Window,shape); SDL_DestroySurface(shape);
-            if (!shaped) { throw std::runtime_error(std::string("SDL_SetWindowShape(empty input region): ")+SDL_GetError()); }
         }
         if (!SDL_ShowWindow(Window)) { throw std::runtime_error(std::string("SDL_ShowWindow: ")+SDL_GetError()); }
         VkSemaphoreCreateInfo semaphore {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};

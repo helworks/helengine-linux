@@ -14,6 +14,8 @@
     {"name":"glslang-tools","version":"16.2.0-2","sha256":"2ad3ea819da071f1eff681415d35bc0af03e076ed5ff3993bffb558095adbb4d"},
     {"name":"spirv-tools","version":"2026.1-1","sha256":"24e972ed4f2e92ada6f64b32ff40550fda02038385656736af871ca3dcb2b867"},
     {"name":"vulkan-validationlayers","version":"1.4.341.0-1","sha256":"2c17a34dd97c72ce819f4c8684fa5fea5a8ef1c689d6a8700f40fcf49d898df3"},
-    {"name":"libshaderc1","version":"2026.1-1","sha256":"125a36c5bbaefc2eb636ad7a3608460d5ea8a9182aad9ae368f9121b0d4b8f38"}
+    {"name":"libshaderc1","version":"2026.1-1","sha256":"125a36c5bbaefc2eb636ad7a3608460d5ea8a9182aad9ae368f9121b0d4b8f38"},
+    {"name":"libwayland-dev","version":"1.24.0-2","sha256":"a548bfe425ed52952a3f4317e4c18b8d85ae10e9455745ff49062523ba8c177e"},
+    {"name":"libwayland-client0","version":"1.24.0-2","sha256":"094db0e190b53872e4d5310cd5fa09ca28ee3936386cd09e5f7d13e645aa12ab"}
   ]
 }

@@ -123,7 +123,7 @@ public static class LinuxBuildWorkspace {
         Directory.CreateDirectory(Path.Combine(contentRoot,"licenses")); File.Copy(license,Path.Combine(contentRoot,"licenses","SDL3.txt"),true);
         File.WriteAllText(Path.Combine(contentRoot,"linux-runtime-dependencies.json"),JsonSerializer.Serialize(new {
             VulkanMinimumApi="1.2", Bundled=new[] {"lib/libSDL3.so.0","licenses/SDL3.txt"}.Concat(shaders.Select(shader => "shaders/"+shader)).ToArray(),
-            System=new[] {"libvulkan.so.1","libstdc++.so.6","libgcc_s.so.1","libc.so.6","libm.so.6"}
+            System=new[] {"libvulkan.so.1","libwayland-client.so.0","libstdc++.so.6","libgcc_s.so.1","libc.so.6","libm.so.6"}
         },new JsonSerializerOptions {WriteIndented=true}));
     }
     /// <summary>Requires the resolved graphics profile dimension so the native host cannot silently ignore selected framebuffer settings.</summary>

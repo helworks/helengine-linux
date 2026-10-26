@@ -28,6 +28,6 @@ int main() {
         renderer.SelectOutput(1); renderer.BeginFrame({0,0,1,1}); renderer.EndFrameAndReadback();
         if (!main.Present(renderer)) { throw std::runtime_error("First output stopped presenting after secondary host destruction."); }
         if (main.GetContext().GetValidationErrorCount()) { throw std::runtime_error("Shared output presentation/teardown caused Vulkan validation errors."); }
-        std::cout << "PASS isolated shared-device opaque/transparent surfaces, empty shape API, independent resize/destruction\n"; return 0;
+        std::cout << "PASS isolated shared-device opaque/transparent surfaces, native Wayland empty input regions, independent resize/destruction\n"; return 0;
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
 }
