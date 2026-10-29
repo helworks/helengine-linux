@@ -1,13 +1,14 @@
 #include "sdl_host.hpp"
 #include <iostream>
 #include <stdexcept>
+using namespace helengine::vulkan;
 
 /// <summary>Verifies borrowed-device presentation and independent native surface teardown only in an explicitly isolated compositor.</summary>
 int main() {
     try {
         if (!std::getenv("HELENGINE_ISOLATED_DISPLAY_TEST")) { throw std::runtime_error("Multi-output host test requires an explicitly isolated compositor."); }
         helengine::linux::SdlHost main("HelEngine isolated opaque output",320,240,true,nullptr,false,true);
-        helengine::linux::VulkanRenderer2D renderer(main.GetContext(),320,240);
+        helengine::vulkan::VulkanRenderer2D renderer(main.GetContext(),320,240);
         renderer.BeginFrame({1,0,0,1}); renderer.EndFrameAndReadback(); main.Present(renderer);
         {
             helengine::linux::SdlHost glass("HelEngine isolated transparent output",160,120,true,&main.GetContext(),true,true);

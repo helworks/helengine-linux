@@ -51,3 +51,9 @@ The committed replay at `/home/helena/dev/helworks/helengine-linux/tests/input/m
 ## Rendering-scene verification
 
 Run `/home/helena/dev/helworks/helengine-linux/tests/test_rendering_scenes.py --player /tmp/helengine/linux/package/helengine_linux --content /tmp/helengine/linux/package` with the same process-local Vulkan environment shown above. The test overwrites `/tmp/helengine/linux/rendering-scenes.json`. Ten 3D scenes require actual hardware visibility samples; the two shadow scenes additionally require visible shadow casters and a frozen generated Core draw whose central receiver pixels change with shadows disabled and restore exactly when enabled. Four software tracers require a completed 320x240 sample pass, finite ray results and nonuniform central GPU pixels. A visible HUD alone cannot pass. `--3d-only` and `--tracing-only` select focused checks without claiming a complete fourteen-scene result.
+
+## Shared native Vulkan module
+
+The native graphics implementation and generated-core rendering bridges now live in `../helengine/engine/helengine.vulkan/native`, in namespace `helengine::vulkan`. This is a CMake module inside the engine's real checkout, separate from its existing managed Vulkan implementation. `helengine_vulkan` links only Vulkan; `helengine_vulkan_bridge` additionally consumes the generated core. The Linux targets compose these libraries with SDL/input/Wayland and the Linux player.
+
+Use `HELENGINE_VULKAN_ROOT` as a CMake cache path, or the same environment variable through the Linux builder, when the engine checkout is elsewhere. Surface creation/destruction is supplied by `SdlVulkanSurfaceSource`; the host retains it until its primary Vulkan context is released. Offscreen tests require no window library. Shared material snapshots live only for the current drawable visit/pass and preserve original submesh inputs and batching limits. Windows/macOS hosts and packages require separate integration and validation.

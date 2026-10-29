@@ -5,6 +5,8 @@
 #include <stdexcept>
 
 namespace helengine::linux {
+using namespace helengine::vulkan;
+
 SdlHost::SdlHost(const char* title, int width, int height, bool validation,VulkanContext* sharedContext,bool transparent,bool noninteractive) : Transparent(transparent) {
     try {
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) { throw std::runtime_error(std::string("SDL_Init(video/gamepad): ") + SDL_GetError()); }
@@ -21,7 +23,8 @@ SdlHost::SdlHost(const char* title, int width, int height, bool validation,Vulka
             VkBool32 supported=VK_FALSE; VulkanContext::Require(vkGetPhysicalDeviceSurfaceSupportKHR(Context->GetPhysicalDevice(),Context->GetPresentQueueFamily(),Surface,&supported),"vkGetPhysicalDeviceSurfaceSupportKHR(secondary)");
             if (!supported) { throw std::runtime_error("Shared Vulkan presentation queue cannot present the additional output."); }
         } else {
-            OwnedContext=std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation,VK_API_VERSION_1_2,Window); Context=OwnedContext.get(); Surface=Context->GetSurface();
+            SurfaceSource=std::make_unique<SdlVulkanSurfaceSource>(Window);
+            OwnedContext=std::make_unique<VulkanContext>(std::span<const char* const>(extensions,count),validation,VK_API_VERSION_1_2,SurfaceSource.get()); Context=OwnedContext.get(); Surface=Context->GetSurface();
         }
         if (!SDL_ShowWindow(Window)) { throw std::runtime_error(std::string("SDL_ShowWindow: ")+SDL_GetError()); }
         VkSemaphoreCreateInfo semaphore {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -40,7 +43,7 @@ void SdlHost::Release() noexcept {
         if (Ready) { vkDestroySemaphore(device,Ready,nullptr); Ready = VK_NULL_HANDLE; }
         if (Acquired) { vkDestroySemaphore(device,Acquired,nullptr); Acquired = VK_NULL_HANDLE; }
         if (OwnsSurface && Surface) { vkDestroySurfaceKHR(Context->GetInstance(),Surface,nullptr); }
-        Surface=VK_NULL_HANDLE; OwnsSurface=false; OwnedContext.reset(); Context=nullptr;
+        Surface=VK_NULL_HANDLE; OwnsSurface=false; OwnedContext.reset(); SurfaceSource.reset(); Context=nullptr;
     }
     if (Window) { SDL_DestroyWindow(Window); Window = nullptr; }
     if (VideoInitialized) { SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD); VideoInitialized = false; }

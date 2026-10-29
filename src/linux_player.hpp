@@ -7,8 +7,9 @@ class RuntimeSceneCatalog;
 class StandardPlatformInputConfiguration;
 class StandardPlatformActionBinding;
 class Core;
+namespace helengine::vulkan { class VulkanRenderManager3D; }
 namespace helengine::linux {
-class LinuxRenderManager3D;
+using helengine::vulkan::VulkanRenderManager3D;
 /// <summary>Runs the real generated Core, packaged scene catalog and native renderer in a normal SDL host or explicit offscreen validation mode.</summary>
 class LinuxPlayer final {
 public:
@@ -28,6 +29,6 @@ private:
     /// <summary>Rejects failed software tracing sessions and optionally requires a complete real 320x240 sample pass plus central GPU output variation.</summary>
     static void ValidateSoftwareTracer(::Core* core,bool requireProgress,const std::vector<uint8_t>& pixels,uint32_t width,uint32_t height);
     /// <summary>Requires central scene pixels to respond to the existing shadow toggle and restore exactly without advancing simulation.</summary>
-    static void ValidateShadowReception(::Core* core,LinuxRenderManager3D& renderer,uint32_t width,uint32_t height);
+    static void ValidateShadowReception(::Core* core,VulkanRenderManager3D& renderer,uint32_t width,uint32_t height);
 };
 }

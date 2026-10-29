@@ -16,6 +16,8 @@ def main():
     replay = pathlib.Path(__file__).resolve().parent / "input/menu-scene-navigation.txt"
     command = [options.player,"--content",options.content,"--frames","100","--validation","--input-script",str(replay)]
     environment = os.environ.copy()
+    # This test requires real pixel evidence even when presenting through Xvfb.
+    environment["HELENGINE_LINUX_DIAGNOSTICS"] = "1"
     if options.xvfb:
         command = ["xvfb-run","-a"] + command
         environment.update(HELENGINE_ISOLATED_DISPLAY_TEST="1",SDL_VIDEO_DRIVER="x11")

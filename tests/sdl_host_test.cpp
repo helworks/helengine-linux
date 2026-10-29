@@ -1,13 +1,14 @@
 #include "sdl_host.hpp"
 #include <iostream>
 #include <stdexcept>
+using namespace helengine::vulkan;
 
 /// <summary>Exercises SDL-created Vulkan surface presentation and resize in an explicitly isolated display session.</summary>
 int main() {
     try {
         if (!std::getenv("HELENGINE_ISOLATED_DISPLAY_TEST")) { throw std::runtime_error("Set HELENGINE_ISOLATED_DISPLAY_TEST only inside an isolated Xvfb/Wayland test session; this test must not open the user desktop."); }
         helengine::linux::SdlHost host("HelEngine isolated surface test",320,240,true);
-        helengine::linux::VulkanRenderer2D renderer(host.GetContext(),320,240);
+        helengine::vulkan::VulkanRenderer2D renderer(host.GetContext(),320,240);
         const uint8_t white[] {255,255,255,255}; const auto texture = renderer.CreateTexture(1,1,white);
         for (int frame = 0; frame < 3; ++frame) {
             SDL_Event event {}; while (host.PollEvent(event)) {}

@@ -36,6 +36,10 @@ internal static class Program {
             bool cancellationPreserved = false;
             try { await LinuxNativeBuildExecutor.RunAsync(command,cancelled.Token); } catch (OperationCanceledException) { cancellationPreserved = true; }
             if (!cancellationPreserved) { throw new InvalidOperationException("Cancelled native build started unexpectedly."); }
+            MeshBatchingSettingsTests.Run();
+            MeshBatchingBuildValidationTests.Run();
+            NativePlayerPublicationTests.Run();
+            await NativeBuildParallelismTests.RunAsync();
             await StagingContractTests.RunAsync();
             await RuntimeManifestContractTests.RunAsync();
             Console.WriteLine("PASS Linux metadata policies16/32/64 Unicode-argument-boundaries profile-validation cancellation");

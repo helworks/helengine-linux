@@ -1,8 +1,10 @@
 #include "linux_player.hpp"
+#include "vulkan_frame_trace_scope.hpp"
+#include "vulkan_mesh_batching_settings.hpp"
 #include "linux_session_guard.hpp"
 #include "generated_disposable_deleter.hpp"
-#include "linux_render_manager_2d.hpp"
-#include "linux_render_manager_3d.hpp"
+#include "vulkan_render_manager_2d.hpp"
+#include "vulkan_render_manager_3d.hpp"
 #include "linux_input_replay.hpp"
 #include "linux_tracy_profiler.hpp"
 #include "sdl_replay_gamepad.hpp"
@@ -40,6 +42,7 @@
 #include "runtime/runtime_scene_catalog_manifest.hpp"
 #include "runtime/runtime_standard_platform_input_manifest.hpp"
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <iomanip>
@@ -48,6 +51,8 @@
 #include <stdexcept>
 
 namespace helengine::linux {
+using namespace helengine::vulkan;
+
 ::RuntimeSceneCatalog* LinuxPlayer::CreateSceneCatalog() {
     size_t count=0; const auto* entries=he_runtime_scene_catalog_entries(&count);
     if (!entries || !count || count>INT32_MAX) { throw std::runtime_error("Native Linux player requires a nonempty generated runtime scene catalog."); }
@@ -109,9 +114,9 @@ void LinuxPlayer::ValidateSoftwareTracer(::Core* core,bool requireProgress,const
         for (int32_t componentIndex=0;components && componentIndex<components->get_Count();++componentIndex) {
             auto* tracer=dynamic_cast<::SoftwarePathTracerComponent*>((*components)[componentIndex]); if (!tracer) { continue; } found=true;
             bool varied=false; const size_t first=(static_cast<size_t>(height/4)*width+width/4)*4;
-            if (pixels.size()!=static_cast<size_t>(width)*height*4) { throw std::runtime_error("Software tracer validation requires an actual complete GPU readback."); }
-            for (uint32_t y=height/4;y<height*3/4 && !varied;++y) { for (uint32_t x=width/4;x<width*3/4;++x) { const size_t pixel=(static_cast<size_t>(y)*width+x)*4; if (pixels[pixel]!=pixels[first] || pixels[pixel+1]!=pixels[first+1] || pixels[pixel+2]!=pixels[first+2]) { varied=true; break; } } }
-            std::cout << "tracer_state=" << static_cast<int>(tracer->get_SessionState()) << " tracer_spp=" << tracer->get_CompletedSpp() << " tracer_rays=" << tracer->get_TotalRays() << " tracer_nonfinite=" << tracer->get_NonFiniteSampleCount() << " tracer_roi_nonuniform=" << varied << '\n';
+            if ((!pixels.empty() || requireProgress) && pixels.size()!=static_cast<size_t>(width)*height*4) { throw std::runtime_error("Software tracer validation requires an actual complete GPU readback."); }
+            for (uint32_t y=height/4;!pixels.empty() && y<height*3/4 && !varied;++y) { for (uint32_t x=width/4;x<width*3/4;++x) { const size_t pixel=(static_cast<size_t>(y)*width+x)*4; if (pixels[pixel]!=pixels[first] || pixels[pixel+1]!=pixels[first+1] || pixels[pixel+2]!=pixels[first+2]) { varied=true; break; } } }
+            std::cout << "tracer_state=" << static_cast<int>(tracer->get_SessionState()) << " tracer_spp=" << tracer->get_CompletedSpp() << " tracer_rays=" << tracer->get_TotalRays() << " tracer_nonfinite=" << tracer->get_NonFiniteSampleCount() << " tracer_roi_nonuniform=" << (pixels.empty()?"unavailable":(varied?"1":"0")) << '\n';
             if (tracer->get_SessionState()==::SoftwarePathTraceSessionState::Failed) { throw std::runtime_error("Generated software tracer entered Failed; a drawable HUD is not successful scene rendering."); }
             if (requireProgress && (tracer->get_SessionState()!=::SoftwarePathTraceSessionState::Tracing || tracer->get_CompletedSpp()<1 || tracer->get_TotalRays()<76800 || tracer->get_NonFiniteSampleCount()!=0 || !varied)) { throw std::runtime_error("Software tracer did not complete a finite 320x240 sample pass with actual central GPU output."); }
         }
@@ -122,7 +127,7 @@ void LinuxPlayer::ValidateSoftwareTracer(::Core* core,bool requireProgress,const
     if (requireProgress && !found) { throw std::runtime_error("Strict software tracing validation found no active generated tracing component."); }
 }
 
-void LinuxPlayer::ValidateShadowReception(::Core* core,LinuxRenderManager3D& renderer,uint32_t width,uint32_t height) {
+void LinuxPlayer::ValidateShadowReception(::Core* core,VulkanRenderManager3D& renderer,uint32_t width,uint32_t height) {
     if (!renderer.get_ShadowsEnabled()) { throw std::runtime_error("Shadow reception validation requires authored shadows enabled in the runtime manifest."); }
     core->Draw(); const auto enabled=renderer.GetLastPixels();
     renderer.set_ShadowsEnabled(false);
@@ -167,8 +172,10 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
     }
     VulkanContext& graphics=window ? window->GetContext() : *offscreen;
     VulkanRenderer2D renderer(graphics,extents[0].width,extents[0].height,(std::filesystem::path(options.ContentRoot)/"shaders").string());
-    LinuxRenderManager2D render2d(renderer); render2d.SetTextCommandReuseMemoryBudgetBytes(he_get_runtime_render2d_text_command_reuse_memory_budget_bytes());
-    LinuxRenderManager3D render3d(renderer,render2d); SdlInputBackend input(options.Offscreen);
+    VulkanRenderManager2D render2d(renderer); render2d.SetTextCommandReuseMemoryBudgetBytes(he_get_runtime_render2d_text_command_reuse_memory_budget_bytes());
+    VulkanRenderManager3D render3d(renderer,render2d);
+    render3d.ConfigureMeshBatching(VulkanMeshBatchingSettings::FromBuild());
+    SdlInputBackend input(options.Offscreen);
     std::unique_ptr<SdlReplayGamepad> replayGamepad;
     if (replay && replay->HasGamepadEvents()) { replayGamepad=std::make_unique<SdlReplayGamepad>(); input.AttachReplayGamepad(replayGamepad->GetId()); }
     auto content=std::make_unique<::HostFileSystemContentStreamSource>(options.ContentRoot);
@@ -195,10 +202,17 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
         auto* entries=catalog->get_Entries();
         const std::string scene=ResolveSceneId(catalog.get(),options.SceneId,he_get_runtime_startup_scene_relative_path());
         std::cout << "core=generated scene=" << scene << " catalog_count=" << entries->get_Length() << " device=" << graphics.GetProperties().deviceName << '\n';
+        const bool diagnostics=std::getenv("HELENGINE_LINUX_DIAGNOSTICS")!=nullptr;
+        const bool pixelReadback=options.RequiresPixelReadback(diagnostics);
+        render3d.SetReadbackEnabled(pixelReadback);
+        if (diagnostics) { std::cout << "phase=scene-load-begin" << std::endl; }
         core.get_SceneManager()->LoadScene(scene,::SceneLoadMode::Single); core.get_SceneManager()->CommitPendingOperationsAtFrameBoundary();
+        if (diagnostics) { std::cout << "phase=scene-load-complete" << std::endl; }
         bool running=true; uint32_t frames=0; auto previous=std::chrono::steady_clock::now();
         std::string lastScene,lastMenu;
         while (running && (!options.Frames || frames<options.Frames)) {
+            VulkanFrameTrace::BeginFrame(frames);
+            VulkanFrameTraceScope eventsTrace("Host.Events");
             if (window) {
                 SDL_Event event {}; while (window->PollEvent(event)) { if (!options.Noninteractive) { input.HandleEvent(event); } if (event.type==SDL_EVENT_QUIT || event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED) { running=false; } }
                 bool anyActive=false;
@@ -210,33 +224,54 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
                         scales[index]=scale; extents[index]=size; ++generations[index]; render3d.OnWindowResize(static_cast<intptr_t>(index+1),size.width,size.height);
                     }
                 }
-                if (!anyActive) { SDL_Delay(16); continue; }
+                if (!anyActive) { VulkanFrameTrace::DiscardFrame(); SDL_Delay(16); continue; }
             }
+            eventsTrace.Finish();
             if (replay) { if (options.Offscreen) { input.set_ReceiveInputInBackground(true); } for (const auto& event : replay->EventsForFrame(frames)) { if (event.type==SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type==SDL_EVENT_GAMEPAD_BUTTON_UP) { replayGamepad->Apply(event); std::cout << "replay_frame=" << frames << " gamepad_button=" << static_cast<int>(event.gbutton.button) << " down=" << event.gbutton.down << '\n'; } else { input.HandleEvent(event); std::cout << "replay_frame=" << frames << " scancode=" << event.key.scancode << " down=" << event.key.down << '\n'; } } }
             const auto now=std::chrono::steady_clock::now();
             const double elapsed=options.Offscreen ? 1.0/60.0 : std::chrono::duration<double>(now-previous).count(); previous=now;
-            const auto updateStart=std::chrono::steady_clock::now(); core.Update(elapsed); const auto drawStart=std::chrono::steady_clock::now(); core.Draw();
+            VulkanFrameTraceScope updateTrace("Core.Update");
+            const auto updateStart=std::chrono::steady_clock::now(); core.Update(elapsed); const auto drawStart=std::chrono::steady_clock::now();
+            updateTrace.Finish();
+            if (diagnostics) { std::cout << "phase=draw-begin frame=" << frames << std::endl; }
+            VulkanFrameTraceScope drawTrace("Core.Draw");
+            core.Draw();
+            drawTrace.Finish();
+            if (diagnostics) { std::cout << "phase=draw-complete frame=" << frames << std::endl; }
             const auto drawEnd=std::chrono::steady_clock::now(); core.SetHostFrameTimings(std::chrono::duration<double,std::milli>(drawStart-updateStart).count(),std::chrono::duration<double,std::milli>(drawEnd-drawStart).count());
             FlushLinuxProfilerFrame(&core);
+            if(std::getenv("HELENGINE_LINUX_FRAME_TIMINGS")) { std::cout << "frame_ms frame=" << frames << " update=" << std::chrono::duration<double,std::milli>(drawStart-updateStart).count() << " draw=" << std::chrono::duration<double,std::milli>(drawEnd-drawStart).count() << std::endl; }
+            if(diagnostics) {
+                uint64_t frameChecksum=1469598103934665603ULL;
+                for(uint8_t byte:render3d.GetLastPixels()) frameChecksum=(frameChecksum^byte)*1099511628211ULL;
+                std::cout << "frame_checksum frame=" << frames << " mesh_visible_samples=" << render3d.GetLastVisibleMeshSamples() << " checksum=" << frameChecksum << std::endl;
+            }
             auto* loaded=core.get_SceneManager()->get_LoadedScenes();
             if (loaded && loaded->get_Count()>0) { const auto current=loaded->get_Item(loaded->get_Count()-1)->get_SceneId().raw(); if (current!=lastScene) { std::cout << "loaded_scene_frame=" << frames << " scene=" << current << '\n'; lastScene=current; } }
             if (replay) { const auto state=SnapshotMenuState(&core); if (state!=lastMenu) { std::cout << "menu_state_frame=" << frames << ' ' << state << '\n'; lastMenu=state; } }
             for (size_t index=0;index<outputs.size();++index) {
                 if (!active[index]) { continue; }
                 renderer.SelectOutput(index+1);
+                VulkanFrameTraceScope presentTrace("Host.Present");
                 const bool completed=options.Offscreen || windows[index]->Present(renderer,scales[index]);
+                presentTrace.Finish();
                 if (!completed) { continue; } ++ticks[index];
                 if (!options.Outputs.empty()) {
+                    VulkanFrameTraceScope publishTrace("Host.Publish");
                     std::cout << "HELENGINE_OUTPUT " << NativeProtocolVersion << ' ' << (options.Session.empty()?"-":options.Session) << ' ' << outputs[index].Tag << ' ' << generations[index] << ' ' << ticks[index] << ' ' << (render3d.IsOutputReady(static_cast<intptr_t>(index+1))?1:0) << ' ' << renderer.GetWidth() << ' ' << renderer.GetHeight() << ' ' << std::setprecision(std::numeric_limits<float>::max_digits10) << scales[index] << '\n' << std::flush;
                 }
             }
-            renderer.SelectOutput(1); ++frames;
+            if(std::getenv("HELENGINE_LINUX_FRAME_TIMINGS")) { std::cout << "present_ms=" << std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-drawEnd).count() << std::endl; }
+            renderer.SelectOutput(1);
+            VulkanFrameTrace::EndFrame(std::cout,render3d.get_LastDrawCallCount(),render3d.GetLastVisibleMeshSamples(),render3d.GetRootMaterialCacheHits(),render3d.GetRootMaterialCacheMisses(),renderer.GetWidth(),renderer.GetHeight(),render3d.IsOutputReady(1));
+            ++frames;
         }
         if (replay && !replay->IsComplete()) { throw std::runtime_error("Linux player stopped before all explicit input replay events were captured."); }
         if (options.RequireShadowReception) { ValidateShadowReception(&core,render3d,renderer.GetWidth(),renderer.GetHeight()); }
         if (graphics.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation errors occurred during actual generated-core execution."); }
         if (!options.Outputs.empty()) {
             for (size_t index=0;index<outputs.size();++index) {
+                if (!pixelReadback) { std::cout << "output=" << outputs[index].Tag << " rgba_bytes=0 readback=disabled\n"; continue; }
                 const auto& outputPixels=render3d.GetOutputPixels(static_cast<intptr_t>(index+1)); uint64_t outputChecksum=1469598103934665603ULL; size_t zero=0,partial=0,opaque=0;
                 for (const auto byte : outputPixels) { outputChecksum=(outputChecksum^byte)*1099511628211ULL; }
                 for (size_t pixel=3;pixel<outputPixels.size();pixel+=4) { if (!outputPixels[pixel]) { ++zero; } else if (outputPixels[pixel]==255) { ++opaque; } else { ++partial; } }
@@ -247,7 +282,10 @@ int LinuxPlayer::Run(const LinuxRunOptions& options) {
         for (uint8_t byte : render3d.GetLastPixels()) { checksum=(checksum^byte)*1099511628211ULL; }
         bool nonuniform=false; const auto& pixels=render3d.GetLastPixels();
         for (size_t index=4;index+3<pixels.size();index+=4) { if (pixels[index]!=pixels[0] || pixels[index+1]!=pixels[1] || pixels[index+2]!=pixels[2] || pixels[index+3]!=pixels[3]) { nonuniform=true; break; } }
-        std::cout << "core_frames=" << frames << " draw_calls=" << render3d.get_LastDrawCallCount() << " mesh_visible_samples=" << render3d.GetLastVisibleMeshSamples() << " shadow_visible_samples=" << render3d.GetLastVisibleShadowSamples() << " rgba_bytes=" << pixels.size() << " checksum=" << checksum << " nonuniform=" << nonuniform << '\n';
+        std::cout << "core_frames=" << frames << " draw_calls=" << render3d.get_LastDrawCallCount() << " mesh_visible_samples=" << render3d.GetLastVisibleMeshSamples() << " shadow_visible_samples=" << render3d.GetLastVisibleShadowSamples() << " rgba_bytes=" << pixels.size();
+        if (pixelReadback) { std::cout << " checksum=" << checksum << " nonuniform=" << nonuniform; }
+        else { std::cout << " readback=disabled"; }
+        std::cout << '\n';
         ValidateSoftwareTracer(&core,options.RequireTracerProgress,pixels,renderer.GetWidth(),renderer.GetHeight());
         if (options.Offscreen && (!frames || render3d.get_LastDrawCallCount()<=0 || !nonuniform)) { throw std::runtime_error("Generated-core offscreen run did not produce drawable content; this is not a successful menu validation."); }
         coreNeedsShutdown=false; core.Dispose();

@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+using namespace helengine::vulkan;
 
 /// <summary>Loads the actual authored HLSL fixture compiled to aligned SPIR-V by the native build.</summary>
 static std::vector<uint32_t> ReadShader(const std::string& path) {
@@ -16,15 +17,24 @@ static std::vector<uint32_t> ReadShader(const std::string& path) {
     return words;
 }
 
+/// <summary>Checks actual pixels after a retained pass updates or reuses its uniforms and sampled descriptors.</summary>
+static void CheckPreparedFrame(VulkanMeshRenderer& renderer,VulkanRenderer2D& output,size_t mesh,size_t material,std::span<const VulkanMeshRenderer::BufferBinding> buffers,std::span<const VulkanMeshRenderer::ImageBinding> images,std::array<uint8_t,3> expected) {
+    renderer.QueueDraw(mesh,material,buffers,images);
+    renderer.RenderFrame(output.GetOutputImageView(),64,64,{0,0,0,1});
+    output.BeginFrame({0,0,0,1},true);const auto pixels=output.EndFrameAndReadback();
+    const size_t center=(32*64+32)*4;
+    if(pixels[center]!=expected[0] || pixels[center+1]!=expected[1] || pixels[center+2]!=expected[2]) throw std::runtime_error("Retained material update produced stale GPU pixels");
+}
+
 /// <summary>Proves real indexed geometry, depth rejection, separate descriptor namespaces, snapshots and GPU resource ownership without a desktop window.</summary>
 int main(int argc,char** argv) {
     try {
-        using namespace helengine::linux;
+
         VulkanContext context({},argc>1 && std::string(argv[1])=="--validation",VK_API_VERSION_1_2);
         VulkanRenderer2D output(context,64,64);
         VulkanMeshRenderer renderer(context);
-        const auto vertex=ReadShader(std::string(HELENGINE_LINUX_SHADER_ROOT)+"/mesh.vert.spv");
-        const auto fragment=ReadShader(std::string(HELENGINE_LINUX_SHADER_ROOT)+"/mesh.frag.spv");
+        const auto vertex=ReadShader(std::string(HELENGINE_VULKAN_SHADER_ROOT)+"/mesh.vert.spv");
+        const auto fragment=ReadShader(std::string(HELENGINE_VULKAN_SHADER_ROOT)+"/mesh.frag.spv");
         const std::array<VulkanMeshRenderer::BindingLayout,4> layout={{{0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_SHADER_STAGE_VERTEX_BIT,64},{1,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_SHADER_STAGE_FRAGMENT_BIT,16},{100,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_SHADER_STAGE_FRAGMENT_BIT,0},{200,VK_DESCRIPTOR_TYPE_SAMPLER,VK_SHADER_STAGE_FRAGMENT_BIT,0}}};
         if(vertex[1]>0x00010300u) {
             VulkanContext legacy({},argc>1 && std::string(argv[1])=="--validation",VK_API_VERSION_1_1);
@@ -68,6 +78,18 @@ int main(int argc,char** argv) {
         const size_t center=(32*64+32)*4;
         if (pixels[center]!=16 || pixels[center+1]!=128 || pixels[center+2]!=56 || pixels[center+3]!=255) throw std::runtime_error("Authored HLSL sampling/uniform snapshot/indexed depth GPU contract failed");
         if (renderer.HasPendingDraws() || renderer.ReferencesImage(image.imageView)) throw std::runtime_error("Completed draws still retain resource ownership");
+        // Keep schema identical across consecutive passes to exercise persistent descriptor reuse.
+        CheckPreparedFrame(renderer,output,nearMesh,material,buffers,images,{0,128,0});
+        CheckPreparedFrame(renderer,output,nearMesh,material,buffers,images,{0,128,0});
+        const std::array<float,4> redTint={1,0,0,1};std::memcpy(buffers[1].Bytes.data(),redTint.data(),16);
+        CheckPreparedFrame(renderer,output,nearMesh,material,buffers,images,{32,0,0});
+        const uint8_t replacementTexel[]={128,32,64,255};const auto replacementTexture=output.CreateTexture(1,1,replacementTexel);
+        const auto replacementImage=output.GetTextureDescriptor(replacementTexture);
+        const std::array<VulkanMeshRenderer::ImageBinding,2> replacementImages={{{100,replacementImage},{200,replacementImage}}};
+        CheckPreparedFrame(renderer,output,nearMesh,material,buffers,replacementImages,{128,0,0});
+        output.ReleaseTexture(replacementTexture);
+        std::memcpy(buffers[1].Bytes.data(),tint.data(),16);
+        CheckPreparedFrame(renderer,output,nearMesh,material,buffers,images,{16,128,56});
         renderer.RenderFrame(output.GetOutputImageView(),64,64,{1,0,0,1},true);
         output.BeginFrame({0,0,0,1},true); pixels=output.EndFrameAndReadback();
         if (pixels[center]!=16 || pixels[center+1]!=128 || pixels[center+2]!=56) throw std::runtime_error("Camera color LOAD failed to preserve the previous frame");
@@ -124,7 +146,7 @@ int main(int argc,char** argv) {
         std::vector<VulkanMeshRenderer::BindingLayout> shadowBindings(probeLayout.begin(),probeLayout.end());
         shadowBindings.push_back({102,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_SHADER_STAGE_FRAGMENT_BIT,0}); shadowBindings.back().ViewType=VK_IMAGE_VIEW_TYPE_CUBE;
         shadowBindings.push_back({202,VK_DESCRIPTOR_TYPE_SAMPLER,VK_SHADER_STAGE_FRAGMENT_BIT,0});
-        const auto probeShader=ReadShader(std::string(HELENGINE_LINUX_SHADER_ROOT)+"/mesh_shadow_sample.frag.spv");
+        const auto probeShader=ReadShader(std::string(HELENGINE_VULKAN_SHADER_ROOT)+"/mesh_shadow_sample.frag.spv");
         const auto probeMaterial=renderer.UploadMaterial(vertex,"VSMain",probeShader,"PSMain",shadowBindings,opaque);
         const std::array<VulkanMeshRenderer::ImageBinding,4> shadowImages={{{101,atlasInfo},{201,atlasInfo},{102,cubeInfo,VK_IMAGE_VIEW_TYPE_CUBE},{202,cubeInfo}}};
         const std::array<float,4> direction={1,0,0,0.25f}; std::memcpy(buffers[1].Bytes.data(),direction.data(),16);
@@ -136,8 +158,8 @@ int main(int argc,char** argv) {
         if(!rejected) throw std::runtime_error("Queued sampled cube owner was released");
         renderer.RenderFrame(output.GetOutputImageView(),64,64,{0,0,0,1}); output.BeginFrame({0,0,0,1},true); pixels=output.EndFrameAndReadback();
         if(pixels[center]!=255 || pixels[center+1]!=255) throw std::runtime_error("Real cleared depth/cube descriptors did not sample neutral depth one");
-        const auto depthVertex=ReadShader(std::string(HELENGINE_LINUX_SHADER_ROOT)+"/mesh_shadow_depth.vert.spv"),depthFragment=ReadShader(std::string(HELENGINE_LINUX_SHADER_ROOT)+"/mesh_shadow_depth.frag.spv");
-        const auto pointVertex=ReadShader(std::string(HELENGINE_LINUX_SHADER_ROOT)+"/mesh_point_shadow.vert.spv"),pointFragment=ReadShader(std::string(HELENGINE_LINUX_SHADER_ROOT)+"/mesh_point_shadow.frag.spv");
+        const auto depthVertex=ReadShader(std::string(HELENGINE_VULKAN_SHADER_ROOT)+"/mesh_shadow_depth.vert.spv"),depthFragment=ReadShader(std::string(HELENGINE_VULKAN_SHADER_ROOT)+"/mesh_shadow_depth.frag.spv");
+        const auto pointVertex=ReadShader(std::string(HELENGINE_VULKAN_SHADER_ROOT)+"/mesh_point_shadow.vert.spv"),pointFragment=ReadShader(std::string(HELENGINE_VULKAN_SHADER_ROOT)+"/mesh_point_shadow.frag.spv");
         const std::array<VulkanMeshRenderer::BindingLayout,1> depthLayout={{{0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,80}}};
         auto pointLayout=depthLayout; pointLayout[0].MinimumBytes=144;
         const VulkanMeshRenderer::MaterialState caster{0,2,true,true};

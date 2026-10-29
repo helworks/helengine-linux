@@ -126,7 +126,8 @@ public static class LinuxPlatformDefinitionFactory {
                             PlatformSettingKind.Boolean,
                             "false",
                             true,
-                            [])
+                            []),
+                        .. LinuxMeshBatchingOptions.CreateSettingDefinitions()
                     ])
             ],
             [

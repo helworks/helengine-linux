@@ -1,6 +1,6 @@
-#include "linux_render_manager_3d.hpp"
+#include "vulkan_render_manager_3d.hpp"
 #include "vulkan_renderer_2d.hpp"
-#include "linux_render_manager_2d.hpp"
+#include "vulkan_render_manager_2d.hpp"
 #include "sdl_input_backend.hpp"
 #include "generated_disposable_deleter.hpp"
 #include "Core.hpp"
@@ -15,6 +15,7 @@
 #include "runtime/runtime_startup_manifest.hpp"
 #include <iostream>
 #include <stdexcept>
+using namespace helengine::vulkan;
 
 /// <summary>Creates a real generated entity/camera registered through the ordinary Core component lifecycle.</summary>
 ::Entity* CreateCamera(::Core& core,const char* tag) {
@@ -28,10 +29,10 @@ int main(int argc,char** argv) {
     try {
         if (argc!=3) { throw std::invalid_argument("Use CONTENT readiness|alpha|legacy."); }
         const std::string selected=argv[2];
-        helengine::linux::VulkanContext context({},true,VK_API_VERSION_1_2);
-        helengine::linux::VulkanRenderer2D graphics(context,32,24);
-        helengine::linux::LinuxRenderManager2D ui(graphics);
-        helengine::linux::LinuxRenderManager3D scene(graphics,ui);
+        helengine::vulkan::VulkanContext context({},true,VK_API_VERSION_1_2);
+        helengine::vulkan::VulkanRenderer2D graphics(context,32,24);
+        helengine::vulkan::VulkanRenderManager2D ui(graphics);
+        helengine::vulkan::VulkanRenderManager3D scene(graphics,ui);
         scene.AddWindow(1,32,24);
         if (selected!="legacy") {
             scene.SetWindowTag(1,"main"); scene.AddWindow(2,24,16); scene.SetWindowTag(2,"glass"); scene.SetOutputTransparent(2,true);
@@ -41,7 +42,7 @@ int main(int argc,char** argv) {
         ::HostFileSystemContentStreamSource content(argv[1]);
         ::RuntimeSceneCatalogEntry entry("completed-scene",he_get_runtime_startup_scene_relative_path());
         Array<::RuntimeSceneCatalogEntry*> entries(1); entries[0]=&entry;
-        helengine::linux::GeneratedDisposableOwner<::RuntimeSceneCatalog> catalog(new ::RuntimeSceneCatalog(&entries));
+        helengine::vulkan::GeneratedDisposableOwner<::RuntimeSceneCatalog> catalog(new ::RuntimeSceneCatalog(&entries));
         ::CoreInitializationOptions initialization; initialization.ContentStreamSource=&content; initialization.SceneCatalog=catalog.get();
         ::Core core(&initialization); ::PlatformInfo platform("linux","test"); core.Initialize(&scene,&ui,&input,&platform,&initialization);
         auto* mainRoot=CreateCamera(core,selected=="legacy"?"":"main");

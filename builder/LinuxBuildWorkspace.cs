@@ -19,6 +19,7 @@ public static class LinuxBuildWorkspace {
         if (!assetsOnly && profile != "Profiler" && request.SelectedCodegenOptionValues.TryGetValue("codegen-generated-function-profiling", out string generatedProfiling) && bool.TryParse(generatedProfiling, out bool enabled) && enabled) {
             throw new NotSupportedException($"Linux target 'linux' build profile '{request.SelectedBuildProfileId}' cannot enable 'codegen-generated-function-profiling'; generated scopes require the native 'profiler' profile with Tracy linkage.");
         }
+        LinuxMeshBatchingOptions batching = LinuxMeshBatchingOptions.FromGraphicsOptions(request.SelectedGraphicsOptionValues);
         string content = Path.GetFullPath(assetsOnly ? Path.Combine(request.WorkingRoot,"content") : request.OutputRoot);
         Directory.CreateDirectory(content);
         List<PlatformBuildItemOutcome> scenes = [];
@@ -56,8 +57,8 @@ public static class LinuxBuildWorkspace {
             string repository = ResolveRepositoryRoot();
             string nativeRoot = LinuxNativeBuildExecutor.ResolveBuildRoot(request.NativeObjectCacheRoot);
             string player = await LinuxNativeBuildExecutor.BuildAsync(repository,nativeRoot,request.GeneratedCoreCppRootPath,Path.Combine(Directory.GetCurrentDirectory(),"code"),content,profile,
-                ReadGraphicsDimension(request.SelectedGraphicsOptionValues,"default-width"),ReadGraphicsDimension(request.SelectedGraphicsOptionValues,"default-height"),cancellationToken);
-            File.Copy(player,Path.Combine(content,"helengine_linux"),true);
+                ReadGraphicsDimension(request.SelectedGraphicsOptionValues,"default-width"),ReadGraphicsDimension(request.SelectedGraphicsOptionValues,"default-height"),batching,cancellationToken);
+            LinuxRuntimeArtifactPublication.PublishPlayer(player,Path.Combine(content,"helengine_linux"));
             CopyNativeRuntime(nativeRoot,content);
             await LinuxRuntimeManifestWriter.WriteAsync(content,request.Manifest,cancellationToken);
         }
@@ -107,7 +108,7 @@ public static class LinuxBuildWorkspace {
     /// <summary>Packages the required UI SPIR-V and SDL3 runtime, declaring the system Vulkan loader and C++ runtime dependencies explicitly.</summary>
     static void CopyNativeRuntime(string nativeRoot,string contentRoot) {
         Directory.CreateDirectory(Path.Combine(contentRoot,"shaders"));
-        string[] shaders = ["quad.vert.spv","quad.frag.spv","shadow_depth.vert.spv","shadow_depth.frag.spv","point_shadow_depth.vert.spv","point_shadow_depth.frag.spv"];
+        string[] shaders = ["quad.vert.spv","quad.frag.spv","shadow_depth.vert.spv","shadow_depth.frag.spv","point_shadow_depth.vert.spv","point_shadow_depth.frag.spv","frustum_cull.comp.spv"];
         foreach (string shader in shaders) {
             string source=Path.Combine(nativeRoot,"shaders",shader);
             if (!File.Exists(source)) { throw new FileNotFoundException("Required Linux backend shader was not produced.",source); }

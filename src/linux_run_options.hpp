@@ -10,6 +10,8 @@ class LinuxRunOptions final {
 public:
     /// <summary>Parses known structured player flags and rejects invalid/missing values before creating any window or GPU resource.</summary>
     LinuxRunOptions(int argc,char** argv);
+    /// <summary>Requires CPU pixels for offscreen validation and explicit pixel diagnostics; ordinary GPU presentation needs no readback.</summary>
+    bool RequiresPixelReadback(bool diagnostics) const { return Offscreen || diagnostics || RequireShadowReception || RequireTracerProgress; }
     /// <summary>Stores the mandatory actual cooked content directory; no current-directory fallback is invented.</summary>
     std::string ContentRoot;
     /// <summary>Registers independently sized tagged outputs in main-layout order.</summary>

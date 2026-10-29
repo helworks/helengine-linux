@@ -36,6 +36,12 @@ int main() {
         Reject({"player","--content",root,"--session","0123456789abcdef0123456789abcdef","--parent-pid","0"});
         Reject({"player","--content",root,"--session",""});
         Reject({"player","--content",root,"--offscreen"});
+        auto policy=Parse({"player","--content",root});
+        for (unsigned mask=0;mask<16;++mask) {
+            policy.Offscreen=(mask&1)!=0; policy.RequireShadowReception=(mask&2)!=0; policy.RequireTracerProgress=(mask&4)!=0;
+            const bool diagnostics=(mask&8)!=0;
+            if (policy.RequiresPixelReadback(diagnostics)!=(mask!=0)) { throw std::runtime_error("Pixel readback policy failed for interactive, offscreen or pixel diagnostics."); }
+        }
         const auto legacy=Parse({"player","--content",root,"--offscreen","--frames","1"});
         if (!legacy.Outputs.empty() || !legacy.Offscreen || legacy.Frames!=1) { throw std::runtime_error("Legacy single-output options changed."); }
         std::cout << "PASS output specs, guarded session and legacy options\n";

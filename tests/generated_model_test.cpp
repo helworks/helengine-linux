@@ -1,5 +1,5 @@
-#include "linux_render_manager_3d.hpp"
-#include "linux_render_manager_2d.hpp"
+#include "vulkan_render_manager_3d.hpp"
+#include "vulkan_render_manager_2d.hpp"
 #include "vulkan_renderer_2d.hpp"
 #include "ModelAsset.hpp"
 #include "RuntimeModel.hpp"
@@ -7,14 +7,15 @@
 #include "RuntimeSubmesh.hpp"
 #include <iostream>
 #include <stdexcept>
+using namespace helengine::vulkan;
 
 /// <summary>Exercises real generated model ownership, fixed GPU32 conversion and malformed input rejection on a validated native device.</summary>
 int main() {
     try {
-        helengine::linux::VulkanContext context({},true,VK_API_VERSION_1_2);
-        helengine::linux::VulkanRenderer2D graphics(context,32,32);
-        helengine::linux::LinuxRenderManager2D ui(graphics);
-        helengine::linux::LinuxRenderManager3D scene(graphics,ui);
+        helengine::vulkan::VulkanContext context({},true,VK_API_VERSION_1_2);
+        helengine::vulkan::VulkanRenderer2D graphics(context,32,32);
+        helengine::vulkan::VulkanRenderManager2D ui(graphics);
+        helengine::vulkan::VulkanRenderManager3D scene(graphics,ui);
         ::ModelAsset asset; asset.set_Id("test:generated-model");
         Array<::float3> positions(3),normals(3); Array<::float2> coordinates(3); Array<uint16_t> indices(3);
         positions[0]=::float3(0.0f,0.0f,0.0f); positions[1]=::float3(1.0f,0.0f,0.0f); positions[2]=::float3(0.0f,1.0f,0.0f);

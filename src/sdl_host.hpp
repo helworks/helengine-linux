@@ -1,10 +1,14 @@
 #pragma once
 #include "vulkan_renderer_2d.hpp"
+#include "sdl_vulkan_surface_source.hpp"
 #include <SDL3/SDL.h>
 #include <stdexcept>
 #include <cmath>
 
 namespace helengine::linux {
+using helengine::vulkan::VulkanContext;
+using helengine::vulkan::VulkanRenderer2D;
+
 /// <summary>Owns one SDL3 Vulkan window, surface and swapchain; platform surface details remain inside SDL.</summary>
 class SdlHost final {
 public:
@@ -37,6 +41,8 @@ private:
     void Release() noexcept;
     /// <summary>Owns the native SDL window.</summary>
     SDL_Window* Window = nullptr;
+    /// <summary>Retains the platform surface provider until its context has destroyed the primary surface.</summary>
+    std::unique_ptr<SdlVulkanSurfaceSource> SurfaceSource;
     /// <summary>Owns the Vulkan instance/device after the window supplies its required instance extensions.</summary>
     std::unique_ptr<VulkanContext> OwnedContext;
     /// <summary>Borrows the first output device; secondary outputs never destroy it.</summary>

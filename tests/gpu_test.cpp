@@ -1,16 +1,17 @@
 #include "vulkan_renderer_2d.hpp"
 #include <iostream>
 #include <stdexcept>
+using namespace helengine::vulkan;
 
 /// <summary>Runs a real offscreen render, then verifies texture sampling, draw order, alpha and clipping through GPU readback.</summary>
 int main(int argc, char** argv) {
     try {
         const bool validation = argc == 2 && std::string(argv[1]) == "--validation";
-        helengine::linux::VulkanContext context({},validation);
+        helengine::vulkan::VulkanContext context({},validation);
         const auto& device = context.GetProperties();
         std::cout << "device=" << device.deviceName << " type=" << device.deviceType
                   << " api=" << VK_VERSION_MAJOR(device.apiVersion) << "." << VK_VERSION_MINOR(device.apiVersion) << '\n';
-        helengine::linux::VulkanRenderer2D renderer(context, 64, 64);
+        helengine::vulkan::VulkanRenderer2D renderer(context, 64, 64);
         const uint8_t white[] {255,255,255,255};
         const auto texture = renderer.CreateTexture(1, 1, white);
         renderer.BeginFrame({0,0,0,1});
@@ -56,6 +57,9 @@ int main(int argc, char** argv) {
             throw std::runtime_error("GPU rounded rectangle fill, border or corner coverage failed.");
         }
         if (!renderer.GetOutputImageView() || !renderer.GetTextureDescriptor(texture).imageView) { throw std::runtime_error("Shared native target/texture borrowing did not expose live GPU views."); }
+        renderer.BeginFrame({0,0,1,1});
+        renderer.DrawRect(texture,16,16,32,32,{1,0,0,1});
+        if (!renderer.EndFrame(false).empty()) { throw std::runtime_error("Disabled readback exposed CPU pixels."); }
         VkCommandBuffer loadCommands=context.BeginCommands();
         VkImageMemoryBarrier loadBarrier {}; loadBarrier.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         loadBarrier.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT; loadBarrier.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -63,7 +67,7 @@ int main(int argc, char** argv) {
         loadBarrier.srcQueueFamilyIndex=loadBarrier.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED; loadBarrier.image=renderer.GetOutputImage(); loadBarrier.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
         vkCmdPipelineBarrier(loadCommands,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,0,0,nullptr,0,nullptr,1,&loadBarrier); context.SubmitAndWait(loadCommands);
         renderer.BeginFrame({0,1,0,1},true); pixels=renderer.EndFrameAndReadback();
-        if (pixels[shapeCenter]!=255 || pixels[shapeCenter+1]!=0) { throw std::runtime_error("UI load pass discarded color content produced by a preceding native pass."); }
+        if (pixels.size()!=64*64*4 || pixels[shapeCenter]!=255 || pixels[shapeCenter+1]!=0 || pixels[shapeCenter+2]!=0 || pixels[shapeCorner]!=0 || pixels[shapeCorner+2]!=255) { throw std::runtime_error("Readback after a GPU-only frame discarded rendered or clear color."); }
         if (context.GetValidationErrorCount()) { throw std::runtime_error("Vulkan validation reported errors during GPU contracts."); }
         std::cout << "PASS textured-quads alpha draw-order clipping resize zero-drawable texture-region row-pitch UV resource-release rounded-fill-border-corners readback\n";
         return 0;
